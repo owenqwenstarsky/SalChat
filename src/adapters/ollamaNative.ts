@@ -4,7 +4,7 @@ import { classifyProviderError } from '@/network/errors';
 import { redactHeaders } from '@/network/redaction';
 import { NdjsonParser } from '@/network/streams';
 import { joinProviderPath } from '@/network/urlPolicy';
-import { attachmentParts, decodeResponse, messageText, providerHeaders, structuredSettings, systemPrompt } from './shared';
+import { attachmentParts, contextFallbackMessage, decodeResponse, messageText, providerHeaders, structuredSettings, systemPrompt } from './shared';
 import type { AdapterEvent, ChatRequest, ConnectionResult, DiscoveredModel, ProviderAdapter, RequestPreview, ResolvedCredential } from './types';
 
 interface OllamaChunk {
@@ -67,6 +67,7 @@ export class OllamaNativeAdapter implements ProviderAdapter {
       const files = attachmentParts(message, request.attachments).filter((file) => file.mimeType.startsWith('image/'));
       return { role: message.role, content: messageText(message), ...(files.length ? { images: files.map((file) => file.base64) } : {}) };
     });
+    messages.unshift(...contextFallbackMessage(request));
     if (prompt && request.model.capabilities.systemMessages.value) messages.unshift({ role: 'system', content: prompt });
     const generic = structuredSettings(request);
     const options = {

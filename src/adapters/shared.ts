@@ -19,6 +19,11 @@ export function systemPrompt(request: ChatRequest): string {
   return buildSystemPrompt(request);
 }
 
+export function contextFallbackMessage(request: ChatRequest): { role: 'user'; content: string }[] {
+  if (request.model.capabilities.systemMessages.value) return [];
+  return [{ role: 'user', content: buildSystemPrompt(request) }];
+}
+
 export function messageText(message: Message): string {
   return message.parts.filter((part): part is Extract<MessagePart, { type: 'text' }> => part.type === 'text').map((part) => part.text).join('\n');
 }

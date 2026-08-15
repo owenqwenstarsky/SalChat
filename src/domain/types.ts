@@ -161,6 +161,29 @@ export interface Generation {
   createdAt: string;
 }
 
+export type ContextMode = 'inherit' | 'automatic' | 'manual';
+
+export interface ContextCheckpoint {
+  summary: string;
+  throughMessageId: string;
+  revision: number;
+  sourceMessageCount: number;
+  estimatedTokensBefore: number;
+  estimatedTokensAfter: number;
+  provenance: GenerationProvenance;
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  createdAt: string;
+}
+
+export interface ConversationContext {
+  mode: ContextMode;
+  note: string;
+  pinnedMessageIds: string[];
+  checkpoint: ContextCheckpoint | null;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -170,6 +193,7 @@ export interface Conversation {
   temperature: number | null;
   maxOutputTokens: number | null;
   stopSequences: string[];
+  context: ConversationContext;
   createdAt: string;
   updatedAt: string;
 }
@@ -179,6 +203,7 @@ export interface AppSettings {
   colorScheme: 'system' | 'light' | 'dark';
   hapticsEnabled: boolean;
   diagnosticsIncludeProviderBody: boolean;
+  contextManagementDefault: Exclude<ContextMode, 'inherit'>;
 }
 
 export interface ModelMetadataPatch {

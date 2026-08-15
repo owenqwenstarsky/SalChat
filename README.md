@@ -29,12 +29,18 @@ Every provider can hold multiple named accounts. The selected account is stored 
 
 Discovery is optional. Every detected field can be manually overridden, and entirely custom models can be created without metadata. Configuration covers input modalities, streaming and reasoning support, MIME types, attachment limits, URL/data-URI behavior, context and output limits, generation defaults, raw request JSON, display icons, emojis, and notes. Manual values always take precedence over detected values and protected request fields cannot be replaced by raw overrides.
 
+## Conversation context
+
+Each chat has layered, inspectable context: a user-editable durable note, exact pinned messages, a rolling model-generated checkpoint, and recent verbatim turns. Automatic mode compacts older unpinned history near 75% of a known model context window; models with unknown limits recover reactively if the provider reports an overflow. Manual compact and rebuild controls are available per chat, and the global default can be changed in Settings.
+
+Compaction uses the chat's selected provider, model, and account as a separate request. It only changes the request context: the full transcript remains stored locally and visible. Switching models reuses the current checkpoint, while its provenance remains inspectable.
+
 ## Data and security
 
 - SQLite stores providers, model metadata, conversations, and message history.
 - SecureStore holds API keys and sensitive headers separately.
 - Attachments are content-addressed with SHA-256 and deduplicated.
-- Backups contain configuration, history, media, and uploaded icons, but no credentials.
+- Version 2 backups contain configuration, layered conversation context, history, media, and uploaded icons, but no credentials. Version 1 archives remain importable with safe context defaults.
 - Diagnostics redact tokens, authorization headers, and common secret-shaped values.
 
 Sal Chat calls providers directly. Treat cleartext HTTP as a local-network development feature; prefer HTTPS for remote services.
@@ -45,4 +51,4 @@ Sal Chat calls providers directly. Treat cleartext HTTP as a local-network devel
 npm run verify
 ```
 
-This runs strict TypeScript checking, Expo lint, 90 unit/integration tests, and enforced coverage thresholds. Native and web bundles can be checked with `npx expo export --platform ios --platform android` and `npx expo export --platform web`.
+This runs strict TypeScript checking, Expo lint, unit/integration tests, and enforced coverage thresholds. Native and web bundles can be checked with `npx expo export --platform ios --platform android` and `npx expo export --platform web`.

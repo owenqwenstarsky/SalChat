@@ -4,7 +4,7 @@ import { classifyProviderError } from '@/network/errors';
 import { redactHeaders } from '@/network/redaction';
 import { SseParser } from '@/network/streams';
 import { joinProviderPath } from '@/network/urlPolicy';
-import { attachmentParts, dataUrl, decodeResponse, messageText, providerHeaders, structuredSettings, systemPrompt } from './shared';
+import { attachmentParts, contextFallbackMessage, dataUrl, decodeResponse, messageText, providerHeaders, structuredSettings, systemPrompt } from './shared';
 import type { AdapterEvent, ChatRequest, ConnectionResult, DiscoveredModel, ProviderAdapter, RequestPreview, ResolvedCredential } from './types';
 
 interface OpenAiChunk {
@@ -45,7 +45,7 @@ export class OpenAiChatAdapter implements ProviderAdapter {
 
   protected serializeMessages(request: ChatRequest): unknown[] {
     const prompt = systemPrompt(request);
-    const history = request.messages.map((message) => serializeOpenAiMessage(message, request));
+    const history = [...contextFallbackMessage(request), ...request.messages.map((message) => serializeOpenAiMessage(message, request))];
     return prompt && request.model.capabilities.systemMessages.value ? [{ role: 'system', content: prompt }, ...history] : history;
   }
 

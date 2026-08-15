@@ -20,15 +20,17 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import type { AttachSource } from '@/components/chat/AttachSourceMenu';
 import { Composer } from '@/components/chat/Composer';
+import { ContextSheet } from '@/components/chat/ContextSheet';
 import { HistoryDrawer } from '@/components/chat/HistoryDrawer';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ModelPicker } from '@/components/chat/ModelPicker';
-import { sendMessage, stopGeneration } from '@/chat/engine';
+import { buildEffectiveContext, type ContextBudget } from '@/chat/context';
+import { compactConversation, sendMessage, stopGeneration } from '@/chat/engine';
 import { ConfigurationError, settingsActionLabel, settingsHref, type SettingsDestination } from '@/domain/configError';
 import { createConversation, createId } from '@/domain/factories';
 import { latestConversationWithMessages, preferredModel, unusedEmptyConversations } from '@/domain/conversations';
 import { composerPlaceholder, modelLabel } from '@/domain/labels';
-import type { Message, Model } from '@/domain/types';
+import type { ContextMode, Message, Model } from '@/domain/types';
 import { importAttachment } from '@/storage/attachments';
 import { useSalStore } from '@/state/store';
 import { font, useTheme } from '@/theme';
@@ -36,6 +38,16 @@ import { font, useTheme } from '@/theme';
 const HEADER_HEIGHT = 52;
 const NEAR_BOTTOM = 80;
 const COMPOSER_KEYBOARD_GAP = 8;
+
+type TimelineItem = { kind: 'message'; message: Message } | { kind: 'checkpoint'; id: string };
+
+const UNKNOWN_BUDGET: ContextBudget = {
+  estimatedTokens: 0,
+  contextWindow: null,
+  inputCeiling: null,
+  utilization: null,
+  overBudget: false,
+};
 
 function useComposerBottomInset(restingInset: number) {
   const [keyboardHeight, setKeyboardHeight] = useState(() =>
@@ -74,10 +86,11 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const composerBottom = useComposerBottomInset(insets.bottom);
-  const listRef = useRef<FlatList<Message>>(null);
+  const listRef = useRef<FlatList<TimelineItem>>(null);
   const pinnedToBottomRef = useRef(true);
   const lastOffsetRef = useRef(0);
   const ignoreScrollRef = useRef(false);
+  const contextStopRequestedRef = useRef(false);
   const conversationKeyRef = useRef(conversationId);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const conversations = useSalStore((state) => state.conversations);
@@ -102,6 +115,8 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   const [sending, setSending] = useState(false);
   const [showModels, setShowModels] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showContext, setShowContext] = useState(false);
+  const [contextBusy, setContextBusy] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
   const [pickedCredentialId, setPickedCredentialId] = useState<string | null>(null);
@@ -169,6 +184,21 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     providerAccounts.find((item) => item.id === provider?.lastCredentialId) ??
     providerAccounts[0] ??
     null;
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const throughId = conversation?.context.checkpoint?.throughMessageId;
+    return messages.flatMap((message) => [
+      { kind: 'message' as const, message },
+      ...(message.id === throughId ? [{ kind: 'checkpoint' as const, id: `checkpoint-${throughId}` }] : []),
+    ]);
+  }, [conversation?.context.checkpoint?.throughMessageId, messages]);
+  const contextBudget = useMemo(() => {
+    if (!conversation || !model || !provider) return UNKNOWN_BUDGET;
+    return buildEffectiveContext(
+      { provider, model, conversation, credential: { profile: null, headers: {} } },
+      messages,
+      attachments,
+    ).budget;
+  }, [attachments, conversation, messages, model, provider]);
 
   const persistConversation = async (nextModel = model) => {
     if (conversation) return conversation;
@@ -182,7 +212,16 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   };
 
   const chooseModel = async (next: Model) => {
-    const incompatible = incompatibleAttachments(next, messages, attachments);
+    const nextProvider = providers.find((item) => item.id === next.providerId);
+    const nextConversation = conversation ? { ...conversation, selectedModelId: next.id } : null;
+    const effectiveMessages = nextProvider && nextConversation
+      ? buildEffectiveContext(
+          { provider: nextProvider, model: next, conversation: nextConversation, credential: { profile: null, headers: {} } },
+          messages,
+          attachments,
+        ).messages
+      : messages;
+    const incompatible = incompatibleAttachments(next, effectiveMessages, attachments);
     if (incompatible.length) {
       Alert.alert('This history contains unsupported media', `${modelLabel(next)} is not configured for ${incompatible.join(', ')} input.`, [
         { text: 'Cancel', style: 'cancel' },
@@ -191,7 +230,6 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       ]);
       return;
     }
-    const nextProvider = providers.find((item) => item.id === next.providerId);
     if (conversation) {
       await saveConversation({
         ...conversation,
@@ -208,14 +246,36 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
 
   const forkTextOnly = async (next: Model) => {
     const nextProvider = providers.find((item) => item.id === next.providerId);
-    const fork = { ...createConversation(next.id), title: `${conversation?.title ?? 'Chat'} · text fork`, selectedCredentialId: nextProvider?.lastCredentialId ?? null, systemPrompt: conversation?.systemPrompt ?? '' };
+    const forkBase = createConversation(next.id);
+    let fork = {
+      ...forkBase,
+      title: `${conversation?.title ?? 'Chat'} · text fork`,
+      selectedCredentialId: nextProvider?.lastCredentialId ?? null,
+      systemPrompt: conversation?.systemPrompt ?? '',
+      context: {
+        ...forkBase.context,
+        mode: conversation?.context.mode ?? 'inherit',
+        note: conversation?.context.note ?? '',
+      },
+    };
     await saveConversation(fork);
+    const copiedIds = new Map<string, string>();
     for (const message of messages) {
       const parts = message.parts.filter((part) => part.type === 'text').map((part) => ({ ...part }));
       if (!parts.length) continue;
       const copy: Message = { ...message, id: createId(), conversationId: fork.id, parts, status: 'complete', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       await saveMessage(copy);
+      copiedIds.set(message.id, copy.id);
     }
+    fork = {
+      ...fork,
+      context: {
+        ...fork.context,
+        pinnedMessageIds: (conversation?.context.pinnedMessageIds ?? []).map((id) => copiedIds.get(id)).filter((id): id is string => Boolean(id)),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    await saveConversation(fork);
     setShowModels(false);
     router.replace({ pathname: '/chat/[id]', params: { id: fork.id } });
   };
@@ -389,6 +449,46 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     }
   };
 
+  const saveContext = async (mode: ContextMode, note: string) => {
+    if (!conversation) return;
+    const latest = useSalStore.getState().conversations.find((item) => item.id === conversation.id) ?? conversation;
+    await saveConversation({
+      ...latest,
+      context: { ...latest.context, mode, note },
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const runCompaction = async (rebuild: boolean, mode: ContextMode, note: string) => {
+    if (!conversation || contextBusy) return;
+    contextStopRequestedRef.current = false;
+    setContextBusy(true);
+    try {
+      await saveContext(mode, note);
+      const passes = await compactConversation(conversation.id, rebuild);
+      Alert.alert(rebuild ? 'Checkpoint rebuilt' : 'Context compacted', `${passes} summary ${passes === 1 ? 'pass' : 'passes'} completed.`);
+    } catch (error) {
+      if (!contextStopRequestedRef.current) {
+        Alert.alert(rebuild ? 'Could not rebuild checkpoint' : 'Could not compact context', error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      setContextBusy(false);
+    }
+  };
+
+  const toggleMessagePin = async (message: Message) => {
+    if (!conversation) return;
+    const latest = useSalStore.getState().conversations.find((item) => item.id === conversation.id) ?? conversation;
+    const current = new Set(latest.context.pinnedMessageIds);
+    if (current.has(message.id)) current.delete(message.id);
+    else current.add(message.id);
+    await saveConversation({
+      ...latest,
+      context: { ...latest.context, pinnedMessageIds: [...current] },
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
   const openRoute = (href: '/models' | '/attachments' | '/settings') => {
     setShowHistory(false);
     setShowModels(false);
@@ -418,6 +518,11 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
           <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{model ? modelLabel(model) : 'Choose a model'}</Text>
           <Ionicons name="chevron-down" size={14} color={theme.muted} />
         </Pressable>
+        {conversation ? (
+          <Pressable accessibilityLabel="Manage conversation context" onPress={() => setShowContext(true)} style={styles.headerButton}>
+            <Ionicons name="layers-outline" size={22} color={conversation.context.checkpoint ? theme.accent : theme.muted} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityLabel="Start a new chat" onPress={() => void startNewChat()} style={styles.headerButton}>
           <Ionicons name="create-outline" size={22} color={theme.text} />
         </Pressable>
@@ -427,9 +532,9 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
           <FlatList
             ref={listRef}
             style={styles.list}
-            data={messages}
+            data={timeline}
             key={conversationId ?? 'new'}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.kind === 'message' ? item.message.id : item.id}
             contentContainerStyle={[styles.messages, !messages.length && styles.center]}
             ItemSeparatorComponent={MessageSeparator}
             keyboardShouldPersistTaps="handled"
@@ -441,7 +546,17 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
             scrollEventThrottle={16}
             onContentSizeChange={(_width, height) => followIfPinned(height)}
             onLayout={() => followIfPinned()}
-            renderItem={({ item }) => <MessageBubble message={item} attachments={attachments} onOpenSettings={openSettings} />}
+            renderItem={({ item }) => item.kind === 'checkpoint' ? (
+              <CheckpointMarker onPress={() => setShowContext(true)} />
+            ) : (
+              <MessageBubble
+                message={item.message}
+                attachments={attachments}
+                pinned={Boolean(conversation?.context.pinnedMessageIds.includes(item.message.id))}
+                onTogglePin={() => void toggleMessagePin(item.message)}
+                onOpenSettings={openSettings}
+              />
+            )}
             ListEmptyComponent={
               <View style={styles.welcome}>
                 <Text style={[styles.welcomeTitle, { color: theme.text }]}>{model ? 'Ready when you are.' : 'Add a provider to start.'}</Text>
@@ -513,6 +628,23 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
         onChooseAccount={(id) => void chooseAccount(id)}
         onManage={() => openRoute('/models')}
       />
+      {conversation ? (
+        <ContextSheet
+          visible={showContext}
+          conversation={conversation}
+          budget={contextBudget}
+          defaultMode={settings.contextManagementDefault}
+          busy={contextBusy}
+          onClose={() => setShowContext(false)}
+          onSave={(mode, note) => void saveContext(mode, note)}
+          onCompact={(mode, note) => void runCompaction(false, mode, note)}
+          onRebuild={(mode, note) => void runCompaction(true, mode, note)}
+          onStop={() => {
+            contextStopRequestedRef.current = true;
+            stopGeneration(conversation.id);
+          }}
+        />
+      ) : null}
       <HistoryDrawer
         visible={showHistory}
         conversations={conversations}
@@ -562,6 +694,20 @@ function MessageSeparator() {
   return <View style={styles.separator} />;
 }
 
+function CheckpointMarker({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Open conversation checkpoint" onPress={onPress} style={styles.checkpointRow}>
+      <View style={[styles.checkpointLine, { backgroundColor: theme.line }]} />
+      <View style={[styles.checkpointPill, { backgroundColor: theme.surface }]}>
+        <Ionicons name="layers-outline" size={13} color={theme.accent} />
+        <Text style={[styles.checkpointText, { color: theme.muted }]}>Earlier context summarized</Text>
+      </View>
+      <View style={[styles.checkpointLine, { backgroundColor: theme.line }]} />
+    </Pressable>
+  );
+}
+
 function mimeTypesFor(model: Model): string[] {
   return [
     ...(model.capabilities.image.value ? model.limits.imageMimeTypes.value : []),
@@ -600,6 +746,10 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   messages: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 28 },
   separator: { height: 22 },
+  checkpointRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkpointLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  checkpointPill: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 },
+  checkpointText: { fontSize: 11, fontFamily: font.semibold },
   center: { flexGrow: 1, justifyContent: 'center' },
   welcome: { alignItems: 'center', paddingHorizontal: 36 },
   welcomeTitle: { fontSize: 26, fontFamily: font.bold, letterSpacing: -0.6, textAlign: 'center' },

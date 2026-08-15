@@ -12,10 +12,14 @@ import { font, useTheme } from '@/theme';
 export function MessageBubble({
   message,
   attachments,
+  pinned = false,
+  onTogglePin,
   onOpenSettings,
 }: {
   message: Message;
   attachments: AttachmentBlob[];
+  pinned?: boolean;
+  onTogglePin?: () => void;
   onOpenSettings?: (destination: SettingsDestination) => void;
 }) {
   const theme = useTheme();
@@ -40,6 +44,7 @@ export function MessageBubble({
   const reveal = () => {
     Alert.alert(user ? 'Message' : 'Response', undefined, [
       { text: 'Copy', onPress: () => void Clipboard.setStringAsync(text) },
+      ...(onTogglePin ? [{ text: pinned ? 'Unpin from context' : 'Pin to context', onPress: onTogglePin }] : []),
       ...(!user && generation ? [{ text: showProvenance ? 'Hide details' : 'Show details', onPress: () => setShowProvenance((value) => !value) }] : []),
       ...(destination && onOpenSettings
         ? [{ text: settingsActionLabel(destination), onPress: () => onOpenSettings(destination) }]
@@ -50,6 +55,12 @@ export function MessageBubble({
 
   return (
     <Pressable onLongPress={reveal} style={[styles.message, user && styles.userMessage]}>
+      {pinned ? (
+        <View style={[styles.pin, user && styles.userPin]}>
+          <Ionicons name="pin" color={theme.accent} size={11} />
+          <Text style={[styles.pinText, { color: theme.accent }]}>Pinned to context</Text>
+        </View>
+      ) : null}
       {files.length ? (
         <View style={[styles.files, user && styles.userFiles]}>
           {files.map((file) => {
@@ -100,6 +111,9 @@ const styles = StyleSheet.create({
   message: { maxWidth: '94%', alignSelf: 'flex-start' },
   userMessage: { alignSelf: 'flex-end', maxWidth: '82%' },
   userBubble: { borderRadius: 20, borderBottomRightRadius: 6, paddingHorizontal: 14, paddingVertical: 10 },
+  pin: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  userPin: { justifyContent: 'flex-end' },
+  pinText: { fontSize: 10, fontFamily: font.semibold },
   provenance: { fontSize: 11, marginTop: 8, fontFamily: font.regular },
   reasoning: { marginBottom: 10 },
   reasoningHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },

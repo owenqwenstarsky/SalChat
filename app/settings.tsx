@@ -95,6 +95,15 @@ export default function SettingsScreen() {
             onChange={(value) => update({ diagnosticsIncludeProviderBody: value })}
           />
         </Group>
+        <Text style={[styles.contextLabel, { color: theme.muted }]}>Default context management</Text>
+        <View style={styles.pills}>
+          {(['automatic', 'manual'] as const).map((value) => (
+            <Pill key={value} active={state.settings.contextManagementDefault === value} onPress={() => update({ contextManagementDefault: value })}>
+              {value === 'automatic' ? 'Automatic' : 'Manual only'}
+            </Pill>
+          ))}
+        </View>
+        <Text style={[styles.contextHint, { color: theme.muted }]}>Chats can inherit this setting or override it. Automatic mode compacts around 75% of a known model window.</Text>
       </Section>
       <Section title="Backup" description="Backups include settings, models, chats, icons, and media. API keys are never exported.">
         <View style={styles.backupActions}>
@@ -153,6 +162,8 @@ function Stat({ value, label }: { value: number; label: string }) {
 const styles = StyleSheet.create({
   label: { fontSize: 12, fontFamily: font.semibold, marginBottom: 8 },
   pills: { flexDirection: 'row', marginBottom: 20 },
+  contextLabel: { fontSize: 12, fontFamily: font.semibold, marginTop: 18, marginBottom: 8 },
+  contextHint: { fontSize: 12, lineHeight: 17, fontFamily: font.regular, marginTop: -10 },
   setting: { minHeight: 72, paddingHorizontal: space.lg, flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingTitle: { fontSize: 15, fontFamily: font.semibold },
   settingBody: { fontSize: 12, lineHeight: 16, marginTop: 3, fontFamily: font.regular },

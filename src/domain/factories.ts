@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { createDefaultConversationContext } from './context';
 import { prettyModelName } from './labels';
 import { createDefaultCapabilities, createDefaultLimits } from './modelConfig';
 import type { Conversation, CredentialProfile, Model, Provider, ProviderKind } from './types';
@@ -74,6 +75,7 @@ export function createConversation(modelId: string | null = null): Conversation 
     temperature: null,
     maxOutputTokens: null,
     stopSequences: [],
+    context: createDefaultConversationContext(),
     createdAt: timestamp,
     updatedAt: timestamp,
   };

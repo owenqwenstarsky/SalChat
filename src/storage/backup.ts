@@ -1,9 +1,10 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { strToU8, unzipSync, zipSync } from 'fflate';
+import { DEFAULT_CONTEXT_MODE, normalizeConversation } from '@/domain/context';
 import type { AppSettings, AttachmentBlob, Conversation, CredentialProfile, Generation, Message, Model, Provider } from '@/domain/types';
 
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export interface BackupData {
   providers: Provider[];
@@ -103,6 +104,12 @@ function parseArchive(bytes: Uint8Array): { manifest: BackupManifest; files: Rec
   const manifest = JSON.parse(new TextDecoder().decode(manifestBytes)) as BackupManifest;
   if (manifest.format !== 'sal-chat-backup') throw new Error('This is not a Sal Chat backup.');
   if (manifest.version > BACKUP_VERSION) throw new Error('This backup was created by a newer version of Sal Chat.');
+  manifest.data.conversations = manifest.data.conversations.map(normalizeConversation);
+  manifest.data.settings = {
+    ...manifest.data.settings,
+    contextManagementDefault:
+      manifest.data.settings.contextManagementDefault === 'manual' ? 'manual' : DEFAULT_CONTEXT_MODE,
+  };
   for (const attachment of manifest.data.attachments) {
     if (!files[`blobs/${attachment.sha256}`]) throw new Error(`Attachment ${attachment.originalName} is missing from the archive.`);
   }

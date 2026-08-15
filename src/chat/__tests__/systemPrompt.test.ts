@@ -12,7 +12,7 @@ function request(modelPrompt = '', conversationPrompt = ''): ChatRequest {
       defaults: { systemPrompt: modelPrompt, temperature: null, maxOutputTokens: null, stopSequences: [], reasoningMode: 'provider_default' },
       rawRequestOverrides: {}, compatibilityNotes: '', createdAt: timestamp, updatedAt: timestamp,
     },
-    conversation: { id: 'c', title: 'Chat', selectedModelId: 'm', selectedCredentialId: null, systemPrompt: conversationPrompt, temperature: null, maxOutputTokens: null, stopSequences: [], createdAt: timestamp, updatedAt: timestamp },
+    conversation: { id: 'c', title: 'Chat', selectedModelId: 'm', selectedCredentialId: null, systemPrompt: conversationPrompt, temperature: null, maxOutputTokens: null, stopSequences: [], context: { mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null }, createdAt: timestamp, updatedAt: timestamp },
     messages: [], credential: { profile: null, headers: {} }, attachments: {},
   };
 }

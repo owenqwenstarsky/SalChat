@@ -19,6 +19,7 @@ jest.mock('expo-file-system', () => {
 });
 
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { strToU8, unzipSync, zipSync } from 'fflate';
 import type { AttachmentBlob } from '@/domain/types';
 import { buildBackupArchive, inspectBackupArchive, restoreBackupArchive, writeBackupArchive, type BackupData } from '../backup';
 
@@ -26,10 +27,10 @@ const attachment: AttachmentBlob = { id: 'a', sha256: 'hash', mimeType: 'image/p
 const data: BackupData = {
   providers: [{ id: 'p', displayName: 'P', kind: 'openai_chat', baseUrl: 'https://example.com/v1', icon: { type: 'emoji', value: 'P' }, lastCredentialId: null, createdAt: '2026', updatedAt: '2026' }],
   credentials: [], models: [],
-  conversations: [{ id: 'v', title: 'Chat', selectedModelId: null, selectedCredentialId: null, systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], createdAt: '2026', updatedAt: '2026' }],
+  conversations: [{ id: 'v', title: 'Chat', selectedModelId: null, selectedCredentialId: null, systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], context: { mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null }, createdAt: '2026', updatedAt: '2026' }],
   messages: [{ id: 'msg', conversationId: 'v', role: 'user', parts: [{ type: 'attachment', attachmentId: 'a', mimeType: 'image/png', name: 'x.png' }], status: 'complete', createdAt: '2026', updatedAt: '2026' }],
   generations: [], attachments: [attachment],
-  settings: { reasoningVisibility: 'collapsed', colorScheme: 'system', hapticsEnabled: true, diagnosticsIncludeProviderBody: true },
+  settings: { reasoningVisibility: 'collapsed', colorScheme: 'system', hapticsEnabled: true, diagnosticsIncludeProviderBody: true, contextManagementDefault: 'automatic' },
 };
 
 function fakeDb(): SQLiteDatabase {
@@ -61,5 +62,19 @@ describe('backup archive I/O', () => {
   it('reuses an existing content-addressed file during restore', async () => {
     mockBackupFiles.set('/docs/sal-attachments/hash', new Uint8Array([1, 2, 3]));
     await expect(restoreBackupArchive(fakeDb(), buildBackupArchive(data))).resolves.toBeUndefined();
+  });
+
+  it('normalizes version 1 backups with context defaults', () => {
+    const files = unzipSync(buildBackupArchive(data));
+    const legacy = JSON.parse(new TextDecoder().decode(files['manifest.json']!));
+    legacy.version = 1;
+    delete legacy.data.settings.contextManagementDefault;
+    delete legacy.data.conversations[0].context;
+    files['manifest.json'] = strToU8(JSON.stringify(legacy));
+
+    const manifest = inspectBackupArchive(zipSync(files));
+
+    expect(manifest.data.settings.contextManagementDefault).toBe('automatic');
+    expect(manifest.data.conversations[0]?.context).toEqual({ mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null });
   });
 });

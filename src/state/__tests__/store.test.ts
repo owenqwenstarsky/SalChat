@@ -9,11 +9,11 @@ const now = '2026-01-01';
 const provider: Provider = { id: 'p', displayName: 'Provider', kind: 'openai_chat', baseUrl: 'https://example.com/v1', icon: { type: 'emoji', value: 'P' }, lastCredentialId: null, createdAt: now, updatedAt: now };
 const credential: CredentialProfile = { id: 'c', providerId: 'p', displayName: 'Work', apiKeyRef: null, organizationRef: null, projectRef: null, headers: [], createdAt: now, updatedAt: now };
 const model: Model = { id: 'm', providerId: 'p', wireId: 'model', displayName: 'Model', description: '', icon: { type: 'emoji', value: 'M' }, enabled: true, favorite: false, sortOrder: 0, capabilities: createDefaultCapabilities('openai_chat'), limits: createDefaultLimits('openai_chat'), defaults: { systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], reasoningMode: 'provider_default' }, rawRequestOverrides: {}, compatibilityNotes: '', createdAt: now, updatedAt: now };
-const conversation: Conversation = { id: 'v', title: 'Chat', selectedModelId: 'm', selectedCredentialId: 'c', systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], createdAt: now, updatedAt: now };
+const conversation: Conversation = { id: 'v', title: 'Chat', selectedModelId: 'm', selectedCredentialId: 'c', systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], context: { mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null }, createdAt: now, updatedAt: now };
 const message: Message = { id: 'msg', conversationId: 'v', role: 'user', parts: [{ type: 'text', text: 'hi' }, { type: 'attachment', attachmentId: 'a', mimeType: 'image/png', name: 'x' }], status: 'complete', createdAt: now, updatedAt: now };
 const generation: Generation = { id: 'g', conversationId: 'v', messageId: 'msg', provenance: { providerId: 'p', providerName: 'Provider', modelId: 'm', modelName: 'Model', wireModelId: 'model', credentialId: 'c', credentialName: 'Work' }, finishReason: 'stop', promptTokens: 1, completionTokens: 1, totalTokens: 2, latencyMs: 10, errorCode: null, createdAt: now };
 const attachment: AttachmentBlob = { id: 'a', sha256: 'hash', mimeType: 'image/png', originalName: 'x.png', byteSize: 1, storedUri: 'file://x', modality: 'image', createdAt: now, referenceCount: 0 };
-const settings: AppSettings = { reasoningVisibility: 'hidden', colorScheme: 'dark', hapticsEnabled: false, diagnosticsIncludeProviderBody: false };
+const settings: AppSettings = { reasoningVisibility: 'hidden', colorScheme: 'dark', hapticsEnabled: false, diagnosticsIncludeProviderBody: false, contextManagementDefault: 'manual' };
 
 function fakeDb(): SQLiteDatabase {
   const db: Record<string, unknown> = {
@@ -27,7 +27,7 @@ function fakeDb(): SQLiteDatabase {
 
 describe('Sal state persistence', () => {
   beforeEach(() => {
-    useSalStore.setState({ db: fakeDb(), initialized: true, providers: [], credentials: [], models: [], conversations: [], messages: [], generations: [], attachments: [], settings: { reasoningVisibility: 'collapsed', colorScheme: 'system', hapticsEnabled: true, diagnosticsIncludeProviderBody: true } });
+    useSalStore.setState({ db: fakeDb(), initialized: true, providers: [], credentials: [], models: [], conversations: [], messages: [], generations: [], attachments: [], settings: { reasoningVisibility: 'collapsed', colorScheme: 'system', hapticsEnabled: true, diagnosticsIncludeProviderBody: true, contextManagementDefault: 'automatic' } });
   });
 
   it('persists each core domain record and settings', async () => {

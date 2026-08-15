@@ -4,6 +4,7 @@ import { OllamaNativeAdapter } from '../ollamaNative';
 import { OllamaOpenAiAdapter } from '../ollamaOpenAi';
 import { OpenAiChatAdapter } from '../openaiChat';
 import { adapterFor } from '..';
+import { contextFallbackMessage } from '../shared';
 import { createDefaultCapabilities, createDefaultLimits } from '@/domain/modelConfig';
 import type { ChatRequest } from '../types';
 
@@ -12,7 +13,7 @@ function request(kind: 'openai_chat' | 'ollama_native' | 'llama_cpp' | 'litellm'
   return {
     provider: { id: 'p', displayName: 'Provider', kind, baseUrl: kind === 'ollama_native' ? 'http://192.168.1.2:11434' : 'https://example.com/v1', icon: { type: 'emoji', value: 'P' }, lastCredentialId: null, createdAt: now, updatedAt: now },
     model: { id: 'm', providerId: 'p', wireId: 'model-x', displayName: 'Model X', description: '', icon: { type: 'emoji', value: 'M' }, enabled: true, favorite: false, sortOrder: 0, capabilities: { ...createDefaultCapabilities(kind), image: { value: true, mode: 'supported', source: 'manual' }, audio: { value: true, mode: 'supported', source: 'manual' }, video: { value: true, mode: 'supported', source: 'manual' } }, limits: createDefaultLimits(kind), defaults: { systemPrompt: 'Be useful', temperature: 0.4, maxOutputTokens: 100, stopSequences: [], reasoningMode: 'provider_default' }, rawRequestOverrides: { top_p: 0.9 }, compatibilityNotes: '', createdAt: now, updatedAt: now },
-    conversation: { id: 'c', title: 'Chat', selectedModelId: 'm', selectedCredentialId: null, systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], createdAt: now, updatedAt: now },
+    conversation: { id: 'c', title: 'Chat', selectedModelId: 'm', selectedCredentialId: null, systemPrompt: '', temperature: null, maxOutputTokens: null, stopSequences: [], context: { mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null }, createdAt: now, updatedAt: now },
     messages: [{ id: 'msg', conversationId: 'c', role: 'user', status: 'complete', parts: [{ type: 'text', text: 'Look' }, { type: 'attachment', attachmentId: 'image', mimeType: 'image/png', name: 'x.png' }, { type: 'attachment', attachmentId: 'audio', mimeType: 'audio/wav', name: 'x.wav' }, { type: 'attachment', attachmentId: 'video', mimeType: 'video/mp4', name: 'x.mp4' }], createdAt: now, updatedAt: now }],
     credential: { profile: null, headers: { Authorization: 'Bearer secret' } },
     attachments: { image: { id: 'image', name: 'x.png', mimeType: 'image/png', base64: 'IMAGE' }, audio: { id: 'audio', name: 'x.wav', mimeType: 'audio/wav', base64: 'AUDIO' }, video: { id: 'video', name: 'x.mp4', mimeType: 'video/mp4', base64: 'VIDEO' } },
@@ -64,6 +65,14 @@ describe('adapter wire formats', () => {
     expect(adapterFor('ollama_openai_chat')).toBeInstanceOf(OllamaOpenAiAdapter);
     expect(adapterFor('llama_cpp')).toBeInstanceOf(LlamaCppAdapter);
     expect(adapterFor('litellm')).toBeInstanceOf(LiteLlmAdapter);
+  });
+
+  it('preserves the Sal harness as a user preamble when system roles are unavailable', () => {
+    const input = request('openai_chat');
+    input.model.capabilities.systemMessages = { value: false, mode: 'unsupported', source: 'manual' };
+    input.contextEnvelope = '<pinned_chat_context>Keep SI units.</pinned_chat_context>';
+    expect(contextFallbackMessage(input)[0]?.content).toContain('Sal Chat');
+    expect(contextFallbackMessage(input)[0]?.content).toContain('Keep SI units.');
   });
 });
 

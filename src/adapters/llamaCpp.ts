@@ -1,6 +1,6 @@
 import type { ChatRequest } from './types';
 import { OpenAiChatAdapter } from './openaiChat';
-import { attachmentParts, dataUrl, messageText, systemPrompt } from './shared';
+import { attachmentParts, contextFallbackMessage, dataUrl, messageText, systemPrompt } from './shared';
 
 export class LlamaCppAdapter extends OpenAiChatAdapter {
   protected override serializeMessages(request: ChatRequest): unknown[] {
@@ -17,6 +17,7 @@ export class LlamaCppAdapter extends OpenAiChatAdapter {
       }
       return { role: message.role, content };
     });
+    history.unshift(...contextFallbackMessage(request));
     return prompt && request.model.capabilities.systemMessages.value ? [{ role: 'system', content: prompt }, ...history] : history;
   }
 }

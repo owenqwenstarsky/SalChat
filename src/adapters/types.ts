@@ -29,6 +29,8 @@ export interface ChatRequest {
   credential: ResolvedCredential;
   attachments: Record<string, ResolvedAttachment>;
   overrides?: Partial<GenerationDefaults>;
+  purpose?: 'chat' | 'compaction';
+  contextEnvelope?: string;
   signal?: AbortSignal;
 }
 

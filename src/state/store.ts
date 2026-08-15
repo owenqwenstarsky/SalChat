@@ -10,6 +10,7 @@ import type {
   Model,
   Provider,
 } from '@/domain/types';
+import { DEFAULT_CONTEXT_MODE, normalizeConversation } from '@/domain/context';
 import { deletePayload, loadPayloads, loadSetting, saveSetting, upsertPayload } from '@/storage/database';
 import { deleteCredentialSecrets } from '@/storage/secrets';
 
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   colorScheme: 'system',
   hapticsEnabled: true,
   diagnosticsIncludeProviderBody: true,
+  contextManagementDefault: DEFAULT_CONTEXT_MODE,
 };
 
 interface SalState {
@@ -41,6 +43,7 @@ interface SalState {
   saveConversation: (conversation: Conversation) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   saveMessage: (message: Message) => Promise<void>;
+  deleteMessages: (ids: string[]) => Promise<void>;
   saveGeneration: (generation: Generation) => Promise<void>;
   saveAttachment: (attachment: AttachmentBlob) => Promise<void>;
   deleteAttachment: (id: string) => Promise<void>;
@@ -70,7 +73,18 @@ export const useSalStore = create<SalState>((set, get) => ({
       loadPayloads<AttachmentBlob>(db, 'attachments'),
       loadSetting<AppSettings>(db, 'app'),
     ]);
-    set({ db, providers, credentials, models, conversations, messages, generations, attachments, settings: settings ?? DEFAULT_SETTINGS, initialized: true });
+    set({
+      db,
+      providers,
+      credentials,
+      models,
+      conversations: conversations.map(normalizeConversation),
+      messages,
+      generations,
+      attachments,
+      settings: { ...DEFAULT_SETTINGS, ...settings },
+      initialized: true,
+    });
   },
 
   saveProvider: async (provider) => {
@@ -151,6 +165,23 @@ export const useSalStore = create<SalState>((set, get) => ({
       await upsertPayload(db, 'messages', message);
     }
     set((state) => ({ messages: replaceById(state.messages, message) }));
+  },
+
+  deleteMessages: async (ids) => {
+    if (!ids.length) return;
+    const db = requireDb(get());
+    await db.withTransactionAsync(async () => {
+      for (const id of ids) {
+        await db.runAsync('DELETE FROM generations WHERE message_id = ?', id);
+        await db.runAsync('DELETE FROM message_attachments WHERE message_id = ?', id);
+        await db.runAsync('DELETE FROM messages WHERE id = ?', id);
+      }
+    });
+    const removed = new Set(ids);
+    set((state) => ({
+      messages: state.messages.filter((message) => !removed.has(message.id)),
+      generations: state.generations.filter((generation) => !removed.has(generation.messageId)),
+    }));
   },
 
   saveGeneration: async (generation) => {
