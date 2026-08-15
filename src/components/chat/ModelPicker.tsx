@@ -89,7 +89,10 @@ export function ModelPicker({
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { ...StyleSheet.absoluteFill },
-  sheet: { maxHeight: '78%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 8 },
+  // Keep the sheet above the full-screen backdrop on native platforms. Without
+  // an explicit stacking order, the backdrop can receive row taps and close
+  // the modal before the model's onPress runs.
+  sheet: { zIndex: 1, elevation: 1, maxHeight: '78%', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingTop: 8 },
   handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, marginBottom: 12 },
   title: { fontSize: 18, fontFamily: font.bold, paddingHorizontal: space.xl, marginBottom: 8 },
   accounts: { maxHeight: 52, marginBottom: 8 },
