@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -75,7 +75,11 @@ export default function NewProviderScreen() {
           value={apiKey}
           onChangeText={setApiKey}
           placeholder={kind.includes('ollama') || kind === 'llama_cpp' || kind === 'litellm' ? 'Optional for local providers' : 'sk-…'}
-          hint="Paste from your provider dashboard. Stored in the device keychain and never included in backups."
+          hint={
+            Platform.OS === 'web'
+              ? 'Kept only for this browser tab session and never included in backups. Browser apps do not have a device keychain.'
+              : 'Paste from your provider dashboard. Stored in the device keychain and never included in backups.'
+          }
         />
         <PrimaryButton loading={saving} onPress={() => void save()}>Create provider</PrimaryButton>
       </KeyboardScroll>

@@ -15,6 +15,34 @@ npm start
 
 Use `npm run ios`, `npm run android`, or scan the Expo QR code. They should install Expo Go from the store (not a newer temp/TestFlight client), then scan the QR code. Local HTTP providers such as Ollama and llama.cpp require a development/native build with the included network permissions; the phone and server must be able to reach each other, and the provider URL must use the server's LAN address rather than `localhost`.
 
+## Deploy the web app
+
+The web build is configured as a client-rendered Expo Router app. Both deployment targets add the cross-origin isolation headers required by Expo SQLite's WebAssembly worker and send deep links back through `index.html`.
+
+### Netlify
+
+The included `netlify.toml` builds and publishes `dist`.
+
+```sh
+npm run build:web
+npm run preview:web
+npx netlify deploy --prod
+```
+
+In the Netlify UI, importing this repository requires no custom build settings. For another static host, publish `dist`, rewrite unknown routes to `/index.html`, and serve every route with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
+
+### Railway
+
+The included `Dockerfile` builds the Expo web export and serves it with Caddy. `railway.json` configures Railway's deployment health check at `/health`; Caddy listens on Railway's injected `PORT` automatically.
+
+1. In Railway, create a project and choose **Deploy from GitHub repo**.
+2. Select this repository. Railway detects the root `Dockerfile`; no build or start command is needed.
+3. After the first deployment, open **Settings → Networking → Generate Domain**.
+
+No Railway variables are required for the web app itself.
+
+Web data remains local to the browser. API keys and custom authentication headers are kept in `sessionStorage`, survive reloads in the same tab, and are cleared when that tab session ends; they are never included in backups. File attachments are stored in the browser's local SQLite database. Provider endpoints must allow browser CORS requests from the deployed origin, and HTTPS pages can only call endpoints permitted by the browser's mixed-content and private-network rules.
+
 ## Provider modes
 
 - OpenAI Chat Completions (`/v1/chat/completions`)

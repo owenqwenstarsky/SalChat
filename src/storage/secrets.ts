@@ -1,6 +1,6 @@
-import * as SecureStore from 'expo-secure-store';
 import type { CredentialProfile } from '@/domain/types';
 import type { ResolvedCredential } from '@/adapters/types';
+import { secretStorage } from './secretStorage';
 
 export const secretRef = (credentialId: string, field: string) => `sal.credential.${credentialId}.${field}`;
 const RESERVED_HEADERS = new Set(['host', 'content-length', 'connection', 'transfer-encoding']);
@@ -27,13 +27,13 @@ export async function saveCredentialSecrets(
   if (values.project !== undefined) next.projectRef = await saveOptional(secretRef(credential.id, 'project'), values.project);
   if (values.headers) {
     const validatedHeaders = validateCustomHeaders(values.headers);
-    for (const existing of next.headers) await SecureStore.deleteItemAsync(existing.secretRef);
+    for (const existing of next.headers) await secretStorage.deleteItemAsync(existing.secretRef);
     next.headers = [];
     let index = 0;
     for (const [name, value] of Object.entries(validatedHeaders)) {
       if (!value) continue;
       const ref = secretRef(credential.id, `header.${index++}`);
-      await SecureStore.setItemAsync(ref, value);
+      await secretStorage.setItemAsync(ref, value);
       next.headers.push({ name, secretRef: ref });
     }
   }
@@ -42,10 +42,10 @@ export async function saveCredentialSecrets(
 
 async function saveOptional(ref: string, value: string): Promise<string | null> {
   if (!value.trim()) {
-    await SecureStore.deleteItemAsync(ref);
+    await secretStorage.deleteItemAsync(ref);
     return null;
   }
-  await SecureStore.setItemAsync(ref, value);
+  await secretStorage.setItemAsync(ref, value);
   return ref;
 }
 
@@ -53,20 +53,20 @@ export async function resolveCredential(profile: CredentialProfile | null): Prom
   if (!profile) return { profile: null, headers: {} };
   const headers: Record<string, string> = {};
   if (profile.apiKeyRef) {
-    const key = await SecureStore.getItemAsync(profile.apiKeyRef);
+    const key = await secretStorage.getItemAsync(profile.apiKeyRef);
     if (key) headers.Authorization = `Bearer ${key}`;
   }
   if (profile.organizationRef) {
-    const value = await SecureStore.getItemAsync(profile.organizationRef);
+    const value = await secretStorage.getItemAsync(profile.organizationRef);
     if (value) headers['OpenAI-Organization'] = value;
   }
   if (profile.projectRef) {
-    const value = await SecureStore.getItemAsync(profile.projectRef);
+    const value = await secretStorage.getItemAsync(profile.projectRef);
     if (value) headers['OpenAI-Project'] = value;
   }
   for (const header of profile.headers) {
     if (!header.secretRef) continue;
-    const value = await SecureStore.getItemAsync(header.secretRef);
+    const value = await secretStorage.getItemAsync(header.secretRef);
     if (value) headers[header.name] = value;
   }
   return { profile, headers };
@@ -74,5 +74,5 @@ export async function resolveCredential(profile: CredentialProfile | null): Prom
 
 export async function deleteCredentialSecrets(profile: CredentialProfile): Promise<void> {
   const refs = [profile.apiKeyRef, profile.organizationRef, profile.projectRef, ...profile.headers.map((header) => header.secretRef)];
-  await Promise.all(refs.filter((ref): ref is string => Boolean(ref)).map((ref) => SecureStore.deleteItemAsync(ref)));
+  await Promise.all(refs.filter((ref): ref is string => Boolean(ref)).map((ref) => secretStorage.deleteItemAsync(ref)));
 }

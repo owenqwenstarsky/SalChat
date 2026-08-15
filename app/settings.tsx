@@ -1,15 +1,14 @@
 import type { ComponentProps } from 'react';
-import { Alert, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Platform, StyleSheet, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen } from '@/components/Screen';
 import { Divider, GhostButton, Group, Pill, PrimaryButton, Section } from '@/components/UI';
-import { buildBackupArchive, inspectBackupArchive, restoreBackupArchive, writeBackupArchive } from '@/storage/backup';
+import { buildBackupArchive, downloadBackupArchive, inspectBackupArchive, readBackupArchive, restoreBackupArchive, writeBackupArchive } from '@/storage/backup';
 import { useSalStore } from '@/state/store';
 import { font, space, useTheme } from '@/theme';
 import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -27,8 +26,12 @@ export default function SettingsScreen() {
         attachments: state.attachments,
         settings: state.settings,
       });
-      const uri = writeBackupArchive(bytes);
-      await Sharing.shareAsync(uri, { mimeType: 'application/zip', dialogTitle: 'Export Sal Chat backup' });
+      if (Platform.OS === 'web') {
+        downloadBackupArchive(bytes);
+      } else {
+        const uri = writeBackupArchive(bytes);
+        await Sharing.shareAsync(uri, { mimeType: 'application/zip', dialogTitle: 'Export Sal Chat backup' });
+      }
     } catch (error) {
       Alert.alert('Export failed', error instanceof Error ? error.message : String(error));
     }
@@ -37,7 +40,8 @@ export default function SettingsScreen() {
     const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
     if (result.canceled) return;
     try {
-      const manifest = inspectBackupArchive(new File(result.assets[0]!.uri).bytesSync());
+      const bytes = await readBackupArchive(result.assets[0]!.uri);
+      const manifest = inspectBackupArchive(bytes);
       Alert.alert(
         'Replace local data?',
         `This verified backup contains ${manifest.data.conversations.length} chats and ${manifest.data.attachments.length} unique attachments. Current Sal data will be replaced and credentials must be re-entered.`,
@@ -47,7 +51,7 @@ export default function SettingsScreen() {
             text: 'Import',
             style: 'destructive',
             onPress: () =>
-              void restoreBackupArchive(state.db!, new File(result.assets[0]!.uri).bytesSync())
+              void restoreBackupArchive(state.db!, bytes)
                 .then(() => state.hydrate(state.db!))
                 .then(() => Alert.alert('Import complete', 'Chats, model configuration, icons, and attachments have been restored.')),
           },

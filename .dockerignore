@@ -1,0 +1,16 @@
+.git
+.expo
+coverage
+dist
+node_modules
+web-build
+
+.env
+.env.*
+
+android
+ios
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
