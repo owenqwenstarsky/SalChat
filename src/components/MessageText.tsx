@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type Tex
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
+import MathRichText, { type MathTextAppearance } from '@/components/math/MathRichText';
 import { isSafeHttpUrl, parseMarkdown } from '@/markdown';
 import type { Block, Inline, ListItem, TableAlign } from '@/markdown';
 import { useSalStore } from '@/state/store';
@@ -52,6 +53,17 @@ function BlockView({
       return <ListView items={block.items} theme={theme} tone={tone} />;
     case 'code':
       return <CodeBlock language={block.language} text={block.text} closed={block.closed} theme={theme} tone={tone} />;
+    case 'math':
+      return (
+        <View style={styles.mathHost}>
+          <MathRichText
+            content={{ type: 'display', value: block.value, raw: block.raw }}
+            appearance={mathAppearance(styles.body, theme, tone)}
+            onOpenLink={openSafeLink}
+            dom={{ matchContents: true, scrollEnabled: false }}
+          />
+        </View>
+      );
     case 'quote':
       return (
         <View style={[styles.quote, { borderLeftColor: theme.accent }]}>
@@ -147,9 +159,9 @@ function CodeBlock({
           ) : null}
         </View>
       ) : null}
-      <ScrollView horizontal bounces={false} showsHorizontalScrollIndicator={false}>
+      <HScroll>
         <Text selectable style={[styles.codeText, { color: theme.text }]}>{text}</Text>
-      </ScrollView>
+      </HScroll>
     </View>
   );
 }
@@ -168,7 +180,7 @@ function TableView({
   tone: 'assistant' | 'user';
 }) {
   return (
-    <ScrollView horizontal bounces={false} showsHorizontalScrollIndicator={false}>
+    <HScroll>
       <View style={[styles.table, { backgroundColor: tone === 'user' ? theme.surface : theme.well, borderColor: theme.line }]}>
         <View style={[styles.tableRow, styles.tableHead, { borderBottomColor: theme.line }]}>
           {header.map((cell, index) => (
@@ -183,7 +195,27 @@ function TableView({
           </View>
         ))}
       </View>
-    </ScrollView>
+    </HScroll>
+  );
+}
+
+/** Horizontal overflow only — never flex-grow, or iOS sizes the scroller to the list viewport. */
+function HScroll({ children }: { children: ReactNode }) {
+  return (
+    <View style={styles.hScrollWrap}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        directionalLockEnabled
+        keyboardShouldPersistTaps="handled"
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        style={styles.hScroll}
+        contentContainerStyle={styles.hScrollContent}
+      >
+        {children}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -227,6 +259,25 @@ function RichText({
   tone: 'assistant' | 'user';
   style: StyleProp<TextStyle>;
 }) {
+  if (containsMath(nodes)) {
+    const flattened = StyleSheet.flatten(style);
+    return (
+      <View
+        style={[
+          styles.mathHost,
+          typeof flattened.flex === 'number' && { flex: flattened.flex },
+          typeof flattened.marginTop === 'number' && { marginTop: flattened.marginTop },
+        ]}
+      >
+        <MathRichText
+          content={{ type: 'inlines', nodes }}
+          appearance={mathAppearance(style, theme, tone)}
+          onOpenLink={openSafeLink}
+          dom={{ matchContents: true, scrollEnabled: false }}
+        />
+      </View>
+    );
+  }
   return (
     <Text selectable style={style}>
       {nodes.map((node, index) => (
@@ -246,6 +297,8 @@ function InlineView({ node, theme, tone }: { node: Inline; theme: SalTheme; tone
           {node.value}
         </Text>
       );
+    case 'math':
+      return node.raw;
     case 'strong':
       return (
         <Text style={styles.strong}>
@@ -284,6 +337,37 @@ function InlineView({ node, theme, tone }: { node: Inline; theme: SalTheme; tone
         </Text>
       );
   }
+}
+
+function containsMath(nodes: Inline[]): boolean {
+  return nodes.some((node) => {
+    if (node.type === 'math') return true;
+    if ('children' in node) return containsMath(node.children);
+    return false;
+  });
+}
+
+function mathAppearance(style: StyleProp<TextStyle>, theme: SalTheme, tone: 'assistant' | 'user'): MathTextAppearance {
+  const flattened = StyleSheet.flatten(style);
+  const family = flattened.fontFamily;
+  const textAlign = flattened.textAlign;
+  return {
+    color: typeof flattened.color === 'string' ? flattened.color : theme.text,
+    accent: theme.accent,
+    codeBackground: tone === 'user' ? theme.well : theme.surface,
+    fontSize: flattened.fontSize ?? 16,
+    lineHeight: flattened.lineHeight ?? 24,
+    fontWeight: family === font.bold ? 700 : family === font.semibold ? 600 : 400,
+    fontStyle: flattened.fontStyle === 'italic' ? 'italic' : 'normal',
+    textDecoration: flattened.textDecorationLine === 'line-through' ? 'line-through' : 'none',
+    textAlign: textAlign === 'center' || textAlign === 'right' ? textAlign : 'left',
+    letterSpacing: flattened.letterSpacing ?? 0,
+  };
+}
+
+async function openSafeLink(href: string) {
+  if (!isSafeHttpUrl(href)) return;
+  await Linking.openURL(href).catch(() => undefined);
 }
 
 function headingSize(level: 1 | 2 | 3 | 4 | 5 | 6, tone: 'assistant' | 'user') {
@@ -331,7 +415,11 @@ const styles = StyleSheet.create({
   em: { fontStyle: 'italic' },
   strike: { textDecorationLine: 'line-through' },
   link: { textDecorationLine: 'underline' },
-  table: { borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  mathHost: { minWidth: 0, alignSelf: 'stretch' },
+  hScrollWrap: { flexGrow: 0, alignSelf: 'stretch' },
+  hScroll: { flexGrow: 0 },
+  hScrollContent: { flexGrow: 0 },
+  table: { alignSelf: 'flex-start', borderRadius: radius.sm, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   tableRow: { flexDirection: 'row' },
   tableHead: { borderBottomWidth: StyleSheet.hairlineWidth },
   tableCell: { minWidth: 88, maxWidth: 220, paddingHorizontal: 10, paddingVertical: 7 },

@@ -2,6 +2,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandIcon } from '@/components/BrandIcon';
+import { modelLabel } from '@/domain/labels';
 import type { CredentialProfile, Model, Provider } from '@/domain/types';
 import { font, radius, space, useTheme } from '@/theme';
 
@@ -67,7 +68,7 @@ export function ModelPicker({
                     <Pressable key={model.id} onPress={() => onChooseModel(model)} style={[styles.row, selected && { backgroundColor: theme.accentSoft }]}>
                       <BrandIcon icon={model.icon} size={36} />
                       <View style={styles.rowBody}>
-                        <Text style={[styles.name, { color: theme.text }]}>{model.displayName}</Text>
+                        <Text style={[styles.name, { color: theme.text }]}>{modelLabel(model)}</Text>
                         <Text style={[styles.meta, { color: theme.muted }]}>{model.wireId}</Text>
                       </View>
                       {selected ? <Ionicons name="checkmark" size={20} color={theme.accent} /> : null}

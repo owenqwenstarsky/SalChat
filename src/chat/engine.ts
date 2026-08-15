@@ -2,6 +2,7 @@ import { adapterFor } from '@/adapters';
 import type { AdapterEvent, ResolvedAttachment } from '@/adapters/types';
 import { ConfigurationError } from '@/domain/configError';
 import { createId } from '@/domain/factories';
+import { modelLabel } from '@/domain/labels';
 import type { Generation, Message, MessagePart } from '@/domain/types';
 import { classifyProviderError } from '@/network/errors';
 import { attachmentBase64 } from '@/storage/attachments';
@@ -98,7 +99,7 @@ export async function sendMessage(input: SendInput): Promise<void> {
     const generation: Generation = {
       id: createId(), conversationId: conversation.id, messageId: current.id,
       provenance: {
-        providerId: provider.id, providerName: provider.displayName, modelId: model.id, modelName: model.displayName, wireModelId: model.wireId,
+        providerId: provider.id, providerName: provider.displayName, modelId: model.id, modelName: modelLabel(model), wireModelId: model.wireId,
         credentialId: credential?.id ?? null, credentialName: credential?.displayName ?? null,
       },
       finishReason, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, totalTokens: usage.totalTokens,
@@ -135,17 +136,17 @@ function validateAttachments(model: ReturnType<typeof useSalStore.getState>['mod
   const destination = { kind: 'model' as const, modelId: model.id };
   const maxCount = model.limits.maxAttachmentCount.value;
   if (maxCount !== null && attachments.length > maxCount) {
-    throw new ConfigurationError(`${model.displayName} allows at most ${maxCount} attachments.`, { ...destination, focus: 'limits' });
+    throw new ConfigurationError(`${modelLabel(model)} allows at most ${maxCount} attachments.`, { ...destination, focus: 'limits' });
   }
   for (const attachment of attachments) {
     if (attachment.modality === 'image' && !model.capabilities.image.value) {
-      throw new ConfigurationError(`${model.displayName} is not configured for image input.`, { ...destination, focus: 'capabilities' });
+      throw new ConfigurationError(`${modelLabel(model)} is not configured for image input.`, { ...destination, focus: 'capabilities' });
     }
     if (attachment.modality === 'audio' && !model.capabilities.audio.value) {
-      throw new ConfigurationError(`${model.displayName} is not configured for audio input.`, { ...destination, focus: 'capabilities' });
+      throw new ConfigurationError(`${modelLabel(model)} is not configured for audio input.`, { ...destination, focus: 'capabilities' });
     }
     if (attachment.modality === 'video' && !model.capabilities.video.value) {
-      throw new ConfigurationError(`${model.displayName} is not configured for video input.`, { ...destination, focus: 'capabilities' });
+      throw new ConfigurationError(`${modelLabel(model)} is not configured for video input.`, { ...destination, focus: 'capabilities' });
     }
     const maxBytes = model.limits.maxFileBytes.value;
     if (maxBytes !== null && attachment.byteSize > maxBytes) {

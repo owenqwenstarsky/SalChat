@@ -1,5 +1,6 @@
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { AttachSourceMenu, type AttachSource } from '@/components/chat/AttachSourceMenu';
 import type { AttachmentBlob } from '@/domain/types';
 import { font, useTheme } from '@/theme';
 
@@ -12,7 +13,13 @@ export function Composer({
   canSend,
   sending,
   canAttach,
+  attachMenuOpen,
+  allowLibrary,
+  allowFiles,
+  includeImages,
+  includeVideos,
   onAttach,
+  onAttachSource,
   onRemoveAttachment,
   onSend,
   onStop,
@@ -25,7 +32,13 @@ export function Composer({
   canSend: boolean;
   sending: boolean;
   canAttach: boolean;
+  attachMenuOpen: boolean;
+  allowLibrary: boolean;
+  allowFiles: boolean;
+  includeImages: boolean;
+  includeVideos: boolean;
   onAttach: () => void;
+  onAttachSource: (source: AttachSource) => void;
   onRemoveAttachment: (id: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -59,9 +72,25 @@ export function Composer({
           })}
         </ScrollView>
       ) : null}
+      {attachMenuOpen ? (
+        <AttachSourceMenu
+          allowLibrary={allowLibrary}
+          allowFiles={allowFiles}
+          includeImages={includeImages}
+          includeVideos={includeVideos}
+          onChoose={onAttachSource}
+        />
+      ) : null}
       <View style={[styles.pill, { backgroundColor: theme.surface }]}>
-        <Pressable accessibilityLabel="Add attachment" disabled={!canAttach} onPress={onAttach} style={styles.side}>
-          <Ionicons name="add" size={24} color={canAttach ? theme.text : theme.line} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={attachMenuOpen ? 'Close attachment options' : 'Add attachment'}
+          accessibilityHint={attachMenuOpen || !allowLibrary || !allowFiles ? undefined : 'Choose photo library or files'}
+          disabled={!canAttach}
+          onPress={onAttach}
+          style={styles.side}
+        >
+          <Ionicons name={attachMenuOpen ? 'close' : 'add'} size={24} color={canAttach ? theme.text : theme.line} />
         </Pressable>
         <TextInput
           value={text}

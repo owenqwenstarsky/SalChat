@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen } from '@/components/Screen';
 import { BrandIcon } from '@/components/BrandIcon';
 import { Divider, EmptyState, Group, PrimaryButton, Section } from '@/components/UI';
-import { providerKindName } from '@/domain/labels';
+import { modelLabel, providerKindName } from '@/domain/labels';
 import { useSalStore } from '@/state/store';
 import { font, space, useTheme } from '@/theme';
 
@@ -52,7 +52,7 @@ export default function ModelsScreen() {
                       <Pressable onPress={() => router.push({ pathname: '/model/[id]', params: { id: model.id } })} style={styles.row}>
                         <BrandIcon icon={model.icon} size={36} />
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.name, { color: theme.text }]}>{model.displayName}</Text>
+                          <Text style={[styles.name, { color: theme.text }]}>{modelLabel(model)}</Text>
                           <Text style={[styles.meta, { color: theme.muted }]}>{model.wireId} · {capabilitySummary(model)}</Text>
                         </View>
                       </Pressable>

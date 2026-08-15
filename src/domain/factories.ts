@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { prettyModelName } from './labels';
 import { createDefaultCapabilities, createDefaultLimits } from './modelConfig';
 import type { Conversation, CredentialProfile, Model, Provider, ProviderKind } from './types';
 
@@ -34,13 +35,13 @@ export function createCredential(providerId: string, displayName: string): Crede
   };
 }
 
-export function createModel(provider: Provider, wireId: string, displayName = wireId): Model {
+export function createModel(provider: Provider, wireId: string, displayName?: string): Model {
   const timestamp = now();
   return {
     id: createId(),
     providerId: provider.id,
     wireId,
-    displayName,
+    displayName: displayName && displayName !== wireId ? displayName : prettyModelName(wireId),
     description: '',
     icon: provider.icon,
     enabled: true,

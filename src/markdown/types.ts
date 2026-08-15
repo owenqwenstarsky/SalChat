@@ -1,6 +1,7 @@
 export type Inline =
   | { type: 'text'; value: string }
   | { type: 'code'; value: string }
+  | { type: 'math'; value: string; raw: string }
   | { type: 'strong'; children: Inline[] }
   | { type: 'em'; children: Inline[] }
   | { type: 'strike'; children: Inline[] }
@@ -24,6 +25,7 @@ export type Block =
   | { type: 'heading'; level: 1 | 2 | 3 | 4 | 5 | 6; inlines: Inline[] }
   | { type: 'list'; items: ListItem[] }
   | { type: 'code'; language: string; text: string; closed: boolean }
+  | { type: 'math'; value: string; raw: string }
   | { type: 'quote'; inlines: Inline[] }
   | { type: 'table'; align: TableAlign[]; header: Inline[][]; rows: Inline[][][] }
   | { type: 'rule' };

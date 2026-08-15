@@ -1,10 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Keyboard,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import type { AttachSource } from '@/components/chat/AttachSourceMenu';
 import { Composer } from '@/components/chat/Composer';
 import { HistoryDrawer } from '@/components/chat/HistoryDrawer';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -13,15 +27,59 @@ import { sendMessage, stopGeneration } from '@/chat/engine';
 import { ConfigurationError, settingsActionLabel, settingsHref, type SettingsDestination } from '@/domain/configError';
 import { createConversation, createId } from '@/domain/factories';
 import { latestConversationWithMessages, preferredModel, unusedEmptyConversations } from '@/domain/conversations';
+import { composerPlaceholder, modelLabel } from '@/domain/labels';
 import type { Message, Model } from '@/domain/types';
 import { importAttachment } from '@/storage/attachments';
 import { useSalStore } from '@/state/store';
 import { font, useTheme } from '@/theme';
 
+const HEADER_HEIGHT = 52;
+const NEAR_BOTTOM = 80;
+const COMPOSER_KEYBOARD_GAP = 8;
+
+function useComposerBottomInset(restingInset: number) {
+  const [keyboardHeight, setKeyboardHeight] = useState(() =>
+    Platform.OS === 'ios' ? (Keyboard.metrics()?.height ?? 0) : 0,
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+
+    const animate = (duration?: number) => {
+      if (!duration) return;
+      LayoutAnimation.configureNext({
+        duration: Math.max(duration, 10),
+        update: { duration: Math.max(duration, 10), type: LayoutAnimation.Types.keyboard },
+      });
+    };
+
+    const show = Keyboard.addListener('keyboardWillShow', (event) => {
+      animate(event.duration);
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', (event) => {
+      animate(event.duration);
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  return keyboardHeight > 0 ? keyboardHeight + COMPOSER_KEYBOARD_GAP : Math.max(restingInset, 10);
+}
+
 export function ChatScreen({ conversationId }: { conversationId: string | null }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const composerBottom = useComposerBottomInset(insets.bottom);
   const listRef = useRef<FlatList<Message>>(null);
+  const pinnedToBottomRef = useRef(true);
+  const lastOffsetRef = useRef(0);
+  const ignoreScrollRef = useRef(false);
+  const conversationKeyRef = useRef(conversationId);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const conversations = useSalStore((state) => state.conversations);
   const allMessages = useSalStore((state) => state.messages);
   const allModels = useSalStore((state) => state.models);
@@ -44,12 +102,64 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   const [sending, setSending] = useState(false);
   const [showModels, setShowModels] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [pickedModelId, setPickedModelId] = useState<string | null>(null);
   const [pickedCredentialId, setPickedCredentialId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (messages.length) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
-  }, [messages]);
+  if (conversationKeyRef.current !== conversationId) {
+    conversationKeyRef.current = conversationId;
+    pinnedToBottomRef.current = true;
+    lastOffsetRef.current = 0;
+    if (showJumpToLatest) setShowJumpToLatest(false);
+    if (showAttachMenu) setShowAttachMenu(false);
+  }
+
+  const streaming = messages[messages.length - 1]?.status === 'streaming';
+
+  const setPinned = (pinned: boolean) => {
+    pinnedToBottomRef.current = pinned;
+    const next = Boolean(!pinned && messages.length);
+    setShowJumpToLatest((current) => (current === next ? current : next));
+  };
+
+  const scrollToLatest = (animated: boolean, contentHeight?: number) => {
+    ignoreScrollRef.current = true;
+    if (typeof contentHeight === 'number') {
+      listRef.current?.scrollToOffset({ offset: contentHeight, animated });
+    } else {
+      listRef.current?.scrollToEnd({ animated });
+    }
+    requestAnimationFrame(() => {
+      ignoreScrollRef.current = false;
+      if (pinnedToBottomRef.current) listRef.current?.scrollToEnd({ animated: false });
+    });
+  };
+
+  const followIfPinned = (contentHeight?: number) => {
+    if (!pinnedToBottomRef.current || !messages.length) return;
+    scrollToLatest(!streaming, contentHeight);
+  };
+
+  const syncPinnedFromScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    if (ignoreScrollRef.current) {
+      lastOffsetRef.current = contentOffset.y;
+      return;
+    }
+    if (pinnedToBottomRef.current && distance > NEAR_BOTTOM && contentOffset.y >= lastOffsetRef.current - 1) {
+      lastOffsetRef.current = contentOffset.y;
+      scrollToLatest(false, contentSize.height);
+      return;
+    }
+    lastOffsetRef.current = contentOffset.y;
+    setPinned(distance <= NEAR_BOTTOM);
+  };
+
+  const jumpToLatest = () => {
+    setPinned(true);
+    scrollToLatest(true);
+  };
 
   const model = models.find((item) => item.id === (conversation?.selectedModelId ?? pickedModelId)) ?? preferredModel(models);
   const provider = providers.find((item) => item.id === model?.providerId) ?? null;
@@ -74,7 +184,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   const chooseModel = async (next: Model) => {
     const incompatible = incompatibleAttachments(next, messages, attachments);
     if (incompatible.length) {
-      Alert.alert('This history contains unsupported media', `${next.displayName} is not configured for ${incompatible.join(', ')} input.`, [
+      Alert.alert('This history contains unsupported media', `${modelLabel(next)} is not configured for ${incompatible.join(', ')} input.`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Configure model', onPress: () => openSettings({ kind: 'model', modelId: next.id, focus: 'capabilities' }) },
         { text: 'Fork text-only', onPress: () => void forkTextOnly(next) },
@@ -118,31 +228,36 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     setPickedCredentialId(credentialId);
   };
 
-  const pickAttachment = async () => {
-    if (!model) return;
-    const types = [
-      ...(model.capabilities.image.value ? model.limits.imageMimeTypes.value : []),
-      ...(model.capabilities.audio.value ? model.limits.audioMimeTypes.value : []),
-      ...(model.capabilities.video.value ? model.limits.videoMimeTypes.value : []),
-    ];
-    if (!types.length) {
-      alertWithSettings(
-        'This model does not have attachment support enabled.',
-        'Turn on image, audio, or video input in this model’s settings.',
-        { kind: 'model', modelId: model.id, focus: 'capabilities' },
-      );
-      return;
-    }
-    const result = await DocumentPicker.getDocumentAsync({ type: types.length ? types : '*/*', multiple: true, copyToCacheDirectory: true });
-    if (result.canceled) return;
+  const allowedMimeTypes = model ? mimeTypesFor(model) : [];
+  const allowLibrary = Boolean(model && (model.capabilities.image.value || model.capabilities.video.value));
+  const allowFiles = allowedMimeTypes.length > 0;
+  const includeImages = Boolean(model?.capabilities.image.value);
+  const includeVideos = Boolean(model?.capabilities.video.value);
+
+  const ingestPickedAssets = async (assets: { uri: string; name: string; mimeType: string; size?: number }[]) => {
     if (!useSalStore.getState().db) return;
+    const accepted: typeof assets = [];
+    const skipped: string[] = [];
+    for (const asset of assets) {
+      if (allowedMimeTypes.length && !mimeTypeAllowed(asset.mimeType, allowedMimeTypes)) {
+        skipped.push(asset.name);
+        continue;
+      }
+      accepted.push(asset);
+    }
+    if (skipped.length) {
+      Alert.alert(
+        skipped.length === 1 ? 'This file type is not enabled' : 'Some files were skipped',
+        `${skipped.join(', ')} can’t be attached to ${model ? modelLabel(model) : 'this model'}.`,
+      );
+    }
     const imported: string[] = [];
-    for (const asset of result.assets) {
+    for (const asset of accepted) {
       try {
         const blob = await importAttachment(useSalStore.getState().db!, {
           uri: asset.uri,
           name: asset.name,
-          mimeType: asset.mimeType ?? 'application/octet-stream',
+          mimeType: asset.mimeType,
           ...(asset.size !== undefined ? { size: asset.size } : {}),
         });
         await saveAttachment(blob);
@@ -151,7 +266,78 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
         Alert.alert('Could not attach file', error instanceof Error ? error.message : String(error));
       }
     }
-    setPending((current) => [...new Set([...current, ...imported])]);
+    if (imported.length) setPending((current) => [...new Set([...current, ...imported])]);
+  };
+
+  const pickFromLibrary = async () => {
+    if (!model) return;
+    const mediaTypes: ImagePicker.MediaType[] = [
+      ...(model.capabilities.image.value ? (['images'] as const) : []),
+      ...(model.capabilities.video.value ? (['videos'] as const) : []),
+    ];
+    if (!mediaTypes.length) return;
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes,
+        allowsMultipleSelection: true,
+        orderedSelection: true,
+        quality: 1,
+        preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      });
+      if (result.canceled) return;
+      await ingestPickedAssets(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          name: asset.fileName?.trim() || (asset.type === 'video' ? 'video.mp4' : 'image.jpg'),
+          mimeType: asset.mimeType ?? (asset.type === 'video' ? 'video/mp4' : 'image/jpeg'),
+          ...(asset.fileSize !== undefined ? { size: asset.fileSize } : {}),
+        })),
+      );
+    } catch (error) {
+      Alert.alert('Could not open photo library', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const pickFromFiles = async () => {
+    if (!allowedMimeTypes.length) return;
+    const result = await DocumentPicker.getDocumentAsync({ type: allowedMimeTypes, multiple: true, copyToCacheDirectory: true });
+    if (result.canceled) return;
+    await ingestPickedAssets(
+      result.assets.map((asset) => ({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType ?? 'application/octet-stream',
+        ...(asset.size !== undefined ? { size: asset.size } : {}),
+      })),
+    );
+  };
+
+  const openAttachMenu = () => {
+    if (!model) return;
+    if (!allowFiles) {
+      alertWithSettings(
+        'This model does not have attachment support enabled.',
+        'Turn on image, audio, or video input in this model’s settings.',
+        { kind: 'model', modelId: model.id, focus: 'capabilities' },
+      );
+      return;
+    }
+    if (!allowLibrary) {
+      void pickFromFiles();
+      return;
+    }
+    if (showAttachMenu) {
+      setShowAttachMenu(false);
+      return;
+    }
+    if (settings.hapticsEnabled) void Haptics.selectionAsync();
+    setShowAttachMenu(true);
+  };
+
+  const chooseAttachSource = (source: AttachSource) => {
+    setShowAttachMenu(false);
+    if (source === 'library') void pickFromLibrary();
+    else void pickFromFiles();
   };
 
   const startNewChat = async () => {
@@ -169,6 +355,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     const next = createConversation(model.id);
     await saveConversation({ ...next, selectedCredentialId: selectedCredential?.id ?? null });
     setShowHistory(false);
+    setShowAttachMenu(false);
     setText('');
     setPending([]);
     router.replace({ pathname: '/chat/[id]', params: { id: next.id } });
@@ -178,6 +365,9 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     if ((!text.trim() && !pending.length) || !model || sending) return;
     const outgoing = text;
     const outgoingAttachments = pending;
+    pinnedToBottomRef.current = true;
+    setShowJumpToLatest(false);
+    setShowAttachMenu(false);
     setText('');
     setPending([]);
     setSending(true);
@@ -208,55 +398,109 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <Pressable accessibilityLabel="Open chat history" onPress={() => setShowHistory(true)} style={styles.headerButton}>
+        <Pressable
+          accessibilityLabel="Open chat history"
+          onPress={() => {
+            setShowAttachMenu(false);
+            setShowHistory(true);
+          }}
+          style={styles.headerButton}
+        >
           <Ionicons name="menu-outline" size={24} color={theme.text} />
         </Pressable>
-        <Pressable style={styles.titleWrap} onPress={() => setShowModels(true)}>
-          <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{model?.displayName ?? 'Choose a model'}</Text>
+        <Pressable
+          style={styles.titleWrap}
+          onPress={() => {
+            setShowAttachMenu(false);
+            setShowModels(true);
+          }}
+        >
+          <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>{model ? modelLabel(model) : 'Choose a model'}</Text>
           <Ionicons name="chevron-down" size={14} color={theme.muted} />
         </Pressable>
         <Pressable accessibilityLabel="Start a new chat" onPress={() => void startNewChat()} style={styles.headerButton}>
           <Ionicons name="create-outline" size={22} color={theme.text} />
         </Pressable>
       </View>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[styles.messages, !messages.length && styles.center]}
-          renderItem={({ item }) => <MessageBubble message={item} attachments={attachments} onOpenSettings={openSettings} />}
-          ListEmptyComponent={
-            <View style={styles.welcome}>
-              <Text style={[styles.welcomeTitle, { color: theme.text }]}>{model ? 'Ready when you are.' : 'Add a provider to start.'}</Text>
-              <Text style={[styles.welcomeBody, { color: theme.muted }]}>
-                {model ? `Messages go directly to ${provider?.displayName ?? model.displayName}.` : 'Connect OpenAI, Ollama, or llama.cpp. History stays on this device.'}
-              </Text>
-              {!model ? (
-                <Pressable onPress={() => router.push('/models')} style={[styles.setup, { backgroundColor: theme.accent }]}>
-                  <Text style={styles.setupText}>Add a provider</Text>
-                </Pressable>
-              ) : null}
+      <View style={styles.body}>
+        <View style={styles.listWrap}>
+          <FlatList
+            ref={listRef}
+            style={styles.list}
+            data={messages}
+            key={conversationId ?? 'new'}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={[styles.messages, !messages.length && styles.center]}
+            ItemSeparatorComponent={MessageSeparator}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            removeClippedSubviews={false}
+            windowSize={31}
+            onScroll={syncPinnedFromScroll}
+            onMomentumScrollEnd={syncPinnedFromScroll}
+            scrollEventThrottle={16}
+            onContentSizeChange={(_width, height) => followIfPinned(height)}
+            onLayout={() => followIfPinned()}
+            renderItem={({ item }) => <MessageBubble message={item} attachments={attachments} onOpenSettings={openSettings} />}
+            ListEmptyComponent={
+              <View style={styles.welcome}>
+                <Text style={[styles.welcomeTitle, { color: theme.text }]}>{model ? 'Ready when you are.' : 'Add a provider to start.'}</Text>
+                <Text style={[styles.welcomeBody, { color: theme.muted }]}>
+                  {model ? `Messages go directly to ${provider?.displayName ?? modelLabel(model)}.` : 'Connect OpenAI, Ollama, or llama.cpp. History stays on this device.'}
+                </Text>
+                {!model ? (
+                  <Pressable onPress={() => router.push('/models')} style={[styles.setup, { backgroundColor: theme.accent }]}>
+                    <Text style={styles.setupText}>Add a provider</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            }
+          />
+          {showJumpToLatest ? (
+            <View pointerEvents="box-none" style={styles.jumpWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Jump to latest"
+                onPress={jumpToLatest}
+                style={[styles.jump, { backgroundColor: theme.surface, borderColor: theme.line }]}
+              >
+                <Ionicons name="chevron-down" size={14} color={theme.accent} />
+                <Text style={[styles.jumpText, { color: theme.text }]}>Latest</Text>
+              </Pressable>
             </View>
-          }
-        />
-        <View style={{ paddingBottom: Math.max(insets.bottom, 10) }}>
+          ) : null}
+          {showAttachMenu ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss attachment options"
+              onPress={() => setShowAttachMenu(false)}
+              style={StyleSheet.absoluteFillObject}
+            />
+          ) : null}
+        </View>
+        <View style={{ paddingBottom: composerBottom }}>
           <Composer
             text={text}
             onChangeText={setText}
-            placeholder={model ? `Message ${model.displayName}` : 'Choose a model'}
+            placeholder={composerPlaceholder(model)}
             pending={pending}
             attachments={attachments}
             canSend={Boolean(model && (text.trim() || pending.length))}
             sending={sending}
             canAttach={Boolean(model)}
-            onAttach={() => void pickAttachment()}
+            attachMenuOpen={showAttachMenu}
+            allowLibrary={allowLibrary}
+            allowFiles={allowFiles}
+            includeImages={includeImages}
+            includeVideos={includeVideos}
+            onAttach={openAttachMenu}
+            onAttachSource={chooseAttachSource}
             onRemoveAttachment={(id) => setPending((current) => current.filter((item) => item !== id))}
             onSend={() => void submit()}
             onStop={() => conversation && stopGeneration(conversation.id)}
           />
         </View>
-      </KeyboardAvoidingView>
+      </View>
       <ModelPicker
         visible={showModels}
         models={models}
@@ -314,6 +558,27 @@ function alertWithSettings(title: string, message: string, destination: Settings
   ]);
 }
 
+function MessageSeparator() {
+  return <View style={styles.separator} />;
+}
+
+function mimeTypesFor(model: Model): string[] {
+  return [
+    ...(model.capabilities.image.value ? model.limits.imageMimeTypes.value : []),
+    ...(model.capabilities.audio.value ? model.limits.audioMimeTypes.value : []),
+    ...(model.capabilities.video.value ? model.limits.videoMimeTypes.value : []),
+  ];
+}
+
+function mimeTypeAllowed(mime: string, allowed: string[]): boolean {
+  const normalized = mime.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mime.toLowerCase();
+  return allowed.some((type) => {
+    const candidate = type.toLowerCase();
+    if (candidate === normalized) return true;
+    return candidate.endsWith('/*') && normalized.startsWith(candidate.slice(0, -1));
+  });
+}
+
 function incompatibleAttachments(
   model: Model,
   messages: Message[],
@@ -326,15 +591,35 @@ function incompatibleAttachments(
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { minHeight: 52, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
+  header: { minHeight: HEADER_HEIGHT, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   title: { fontSize: 16, fontFamily: font.semibold, maxWidth: '80%' },
-  messages: { paddingHorizontal: 18, paddingVertical: 20, gap: 22 },
+  body: { flex: 1 },
+  listWrap: { flex: 1 },
+  list: { flex: 1 },
+  messages: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 28 },
+  separator: { height: 22 },
   center: { flexGrow: 1, justifyContent: 'center' },
   welcome: { alignItems: 'center', paddingHorizontal: 36 },
   welcomeTitle: { fontSize: 26, fontFamily: font.bold, letterSpacing: -0.6, textAlign: 'center' },
   welcomeBody: { fontSize: 15, textAlign: 'center', lineHeight: 21, marginTop: 8, fontFamily: font.regular },
   setup: { marginTop: 22, minHeight: 44, paddingHorizontal: 18, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   setupText: { color: '#FFF', fontSize: 15, fontFamily: font.semibold },
+  jumpWrap: { position: 'absolute', left: 0, right: 0, bottom: 10, alignItems: 'center' },
+  jump: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  jumpText: { fontSize: 13, fontFamily: font.semibold },
 });

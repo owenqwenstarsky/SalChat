@@ -13,7 +13,7 @@ import type { BrandLogo, IconSpec } from '@/domain/types';
 import { resolveCredential, saveCredentialSecrets } from '@/storage/secrets';
 import { useSalStore } from '@/state/store';
 import { radius, space, useTheme } from '@/theme';
-import { providerKindName } from '@/domain/labels';
+import { modelLabel, providerKindName } from '@/domain/labels';
 
 export default function ProviderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -112,7 +112,7 @@ export default function ProviderDetailScreen() {
         </View>
       </Section>
       <Section title="Models" description="Discovery is optional. Any wire model ID can be configured manually.">
-        <Group>{models.map((model, index) => <View key={model.id}>{index ? <Divider /> : null}<Pressable style={styles.row} onPress={() => router.push({ pathname: '/model/[id]', params: { id: model.id } })}><BrandIcon icon={model.icon} size={36} /><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{model.displayName}</Text><Text style={[styles.meta, { color: theme.muted }]}>{model.wireId}</Text></View></Pressable></View>)}</Group>
+        <Group>{models.map((model, index) => <View key={model.id}>{index ? <Divider /> : null}<Pressable style={styles.row} onPress={() => router.push({ pathname: '/model/[id]', params: { id: model.id } })}><BrandIcon icon={model.icon} size={36} /><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{modelLabel(model)}</Text><Text style={[styles.meta, { color: theme.muted }]}>{model.wireId}</Text></View></Pressable></View>)}</Group>
         <View style={styles.form}><Field label="Manual model ID" value={wireId} onChangeText={setWireId} autoCapitalize="none" autoCorrect={false} placeholder="model-name:tag" /><PrimaryButton compact disabled={!wireId.trim()} onPress={() => void addModel()}>Add and configure</PrimaryButton></View>
       </Section>
       <GhostButton danger onPress={() => Alert.alert('Delete provider?', 'Models and credentials will be removed. Existing chat messages keep their provenance labels.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteProvider(provider.id).then(() => router.replace('/models')) }])}>Delete provider</GhostButton>
