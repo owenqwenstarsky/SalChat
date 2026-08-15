@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AssistantText } from '@/components/AssistantText';
+import { MessageText } from '@/components/MessageText';
 import type { AttachmentBlob, Message, MessagePart } from '@/domain/types';
 import { useSalStore } from '@/state/store';
 import { font, useTheme } from '@/theme';
@@ -58,10 +58,10 @@ export function MessageBubble({ message, attachments }: { message: Message; atta
       {text ? (
         user ? (
           <View style={[styles.userBubble, { backgroundColor: theme.accentSoft }]}>
-            <Text style={[styles.userText, { color: theme.text }]}>{text}</Text>
+            <MessageText tone="user">{text}</MessageText>
           </View>
         ) : (
-          <AssistantText>{text}</AssistantText>
+          <MessageText tone="assistant">{text}</MessageText>
         )
       ) : null}
       {!user && showProvenance && generation ? (
@@ -79,7 +79,6 @@ const styles = StyleSheet.create({
   message: { maxWidth: '94%', alignSelf: 'flex-start' },
   userMessage: { alignSelf: 'flex-end', maxWidth: '82%' },
   userBubble: { borderRadius: 20, borderBottomRightRadius: 6, paddingHorizontal: 14, paddingVertical: 10 },
-  userText: { fontSize: 16, lineHeight: 22, fontFamily: font.regular },
   provenance: { fontSize: 11, marginTop: 8, fontFamily: font.regular },
   reasoning: { marginBottom: 10 },
   reasoningHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
