@@ -1,5 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { font, radius, space, useTheme } from '@/theme';
 
 export function PrimaryButton({
@@ -46,11 +47,19 @@ export function GhostButton({
   );
 }
 
-export function Field({ label, hint, ...props }: React.ComponentProps<typeof TextInput> & { label: string; hint?: string }) {
+export function Field({
+  label,
+  hint,
+  action,
+  ...props
+}: React.ComponentProps<typeof TextInput> & { label: string; hint?: string; action?: ReactNode }) {
   const theme = useTheme();
   return (
     <View style={styles.field}>
-      <Text style={[styles.label, { color: theme.muted }]}>{label}</Text>
+      <View style={styles.fieldHeader}>
+        <Text style={[styles.label, { color: theme.muted }]}>{label}</Text>
+        {action}
+      </View>
       <TextInput
         placeholderTextColor={theme.muted}
         {...props}
@@ -63,6 +72,54 @@ export function Field({ label, hint, ...props }: React.ComponentProps<typeof Tex
       />
       {hint ? <Text style={[styles.hint, { color: theme.muted }]}>{hint}</Text> : null}
     </View>
+  );
+}
+
+/** Secure field with a one-tap Paste — API keys are copied, not typed. */
+export function SecretField({
+  label,
+  value,
+  onChangeText,
+  hint,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  hint?: string;
+  placeholder?: string;
+}) {
+  const theme = useTheme();
+  const paste = async () => {
+    const text = (await Clipboard.getStringAsync()).trim();
+    if (text) onChangeText(text);
+  };
+  return (
+    <Field
+      label={label}
+      value={value}
+      onChangeText={onChangeText}
+      {...(hint ? { hint } : {})}
+      {...(placeholder ? { placeholder } : {})}
+      secureTextEntry
+      autoCapitalize="none"
+      autoCorrect={false}
+      spellCheck={false}
+      textContentType="none"
+      autoComplete="off"
+      importantForAutofill="no"
+      action={
+        value ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Clear ${label}`} hitSlop={8} onPress={() => onChangeText('')}>
+            <Text style={[styles.fieldAction, { color: theme.muted }]}>Clear</Text>
+          </Pressable>
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Paste ${label}`} hitSlop={8} onPress={() => void paste()}>
+            <Text style={[styles.fieldAction, { color: theme.accent }]}>Paste</Text>
+          </Pressable>
+        )
+      }
+    />
   );
 }
 
@@ -137,6 +194,8 @@ const styles = StyleSheet.create({
   ghost: { minHeight: 44, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   ghostText: { fontSize: 15, fontFamily: font.semibold },
   field: { gap: 6, marginBottom: space.lg },
+  fieldHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 18 },
+  fieldAction: { fontSize: 13, fontFamily: font.semibold },
   label: { fontSize: 12, fontFamily: font.semibold },
   input: { minHeight: 48, borderRadius: radius.md, paddingHorizontal: 14, fontSize: 16, fontFamily: font.regular },
   multiline: { minHeight: 104, paddingTop: 13, textAlignVertical: 'top' },

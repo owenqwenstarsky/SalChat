@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { Screen } from '@/components/Screen';
 import { BrandIcon } from '@/components/BrandIcon';
-import { Divider, Field, GhostButton, Group, PrimaryButton, Section } from '@/components/UI';
+import { Divider, Field, GhostButton, Group, PrimaryButton, SecretField, Section } from '@/components/UI';
 import { adapterFor } from '@/adapters';
 import { applyDetectedMetadata } from '@/domain/modelConfig';
 import { createCredential, createModel } from '@/domain/factories';
@@ -100,7 +100,16 @@ export default function ProviderDetailScreen() {
       </Section>
       <Section title="Accounts" description="Choose between these credentials directly from the chat composer.">
         <Group>{credentials.map((credential, index) => <View key={credential.id}>{index ? <Divider /> : null}<View style={styles.row}><Text style={[styles.avatar, { backgroundColor: theme.accentSoft, color: theme.accent }]}>{credential.displayName.slice(0, 1).toUpperCase()}</Text><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{credential.displayName}</Text><Text style={[styles.meta, { color: theme.muted }]}>{credential.apiKeyRef ? 'API key stored securely' : 'No API key'}</Text></View>{provider.lastCredentialId === credential.id ? <Text style={[styles.current, { color: theme.positive }]}>Last used</Text> : null}</View></View>)}</Group>
-        <View style={styles.form}><Field label="New account name" value={accountName} onChangeText={setAccountName} placeholder="Work" /><Field label="API key" value={key} onChangeText={setKey} secureTextEntry placeholder="Optional" /><View style={styles.twoCol}><View style={{ flex: 1 }}><Field label="Organization" value={organization} onChangeText={setOrganization} placeholder="Optional" /></View><View style={{ flex: 1 }}><Field label="Project" value={project} onChangeText={setProject} placeholder="Optional" /></View></View><Field label="Custom authentication headers" value={headersText} onChangeText={setHeadersText} multiline autoCapitalize="none" autoCorrect={false} hint={'JSON object, for example {"X-API-Key":"…"}'} /><PrimaryButton compact disabled={!accountName.trim()} onPress={() => void addAccount()}>Add account</PrimaryButton></View>
+        <View style={styles.form}>
+          <Field label="New account name" value={accountName} onChangeText={setAccountName} placeholder="Work" />
+          <SecretField label="API key" value={key} onChangeText={setKey} placeholder="Optional" />
+          <View style={styles.twoCol}>
+            <View style={{ flex: 1 }}><Field label="Organization" value={organization} onChangeText={setOrganization} placeholder="Optional" /></View>
+            <View style={{ flex: 1 }}><Field label="Project" value={project} onChangeText={setProject} placeholder="Optional" /></View>
+          </View>
+          <Field label="Custom authentication headers" value={headersText} onChangeText={setHeadersText} multiline autoCapitalize="none" autoCorrect={false} hint={'JSON object, for example {"X-API-Key":"…"}'} />
+          <PrimaryButton compact disabled={!accountName.trim()} onPress={() => void addAccount()}>Add account</PrimaryButton>
+        </View>
       </Section>
       <Section title="Models" description="Discovery is optional. Any wire model ID can be configured manually.">
         <Group>{models.map((model, index) => <View key={model.id}>{index ? <Divider /> : null}<Pressable style={styles.row} onPress={() => router.push({ pathname: '/model/[id]', params: { id: model.id } })}><BrandIcon icon={model.icon} size={36} /><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{model.displayName}</Text><Text style={[styles.meta, { color: theme.muted }]}>{model.wireId}</Text></View></Pressable></View>)}</Group>

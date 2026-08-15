@@ -3,7 +3,8 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Field, Pill, PrimaryButton } from '@/components/UI';
+import { KeyboardScroll } from '@/components/Screen';
+import { Field, Pill, PrimaryButton, SecretField } from '@/components/UI';
 import { createCredential, createProvider } from '@/domain/factories';
 import type { ProviderKind } from '@/domain/types';
 import { validateProviderUrl } from '@/network/urlPolicy';
@@ -60,7 +61,7 @@ export default function NewProviderScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <View style={styles.nav}><Pressable onPress={() => router.back()}><Ionicons name="close" size={27} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Add provider</Text><View style={{ width: 27 }} /></View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <KeyboardScroll contentContainerStyle={styles.content}>
         <Text style={[styles.step, { color: theme.muted }]}>Protocol</Text>
         <Text style={[styles.hero, { color: theme.text }]}>How does this provider speak?</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pills}>{KINDS.map((item) => <Pill key={item.kind} active={kind === item.kind} onPress={() => chooseKind(item.kind)}>{item.label}</Pill>)}</ScrollView>
@@ -68,9 +69,15 @@ export default function NewProviderScreen() {
         <Field label="Base URL" value={baseUrl} onChangeText={setBaseUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" hint="Public URLs must use HTTPS. Private LAN HTTP endpoints show a one-time warning." />
         <Text style={[styles.step, { color: theme.muted }]}>First account</Text>
         <Field label="Account name" value={accountName} onChangeText={setAccountName} placeholder="Personal, Work, Team…" />
-        <Field label="API key" value={apiKey} onChangeText={setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={kind.includes('ollama') || kind === 'llama_cpp' ? 'Optional for local providers' : 'sk-…'} hint="Stored in the device secure keychain and never included in backups." />
+        <SecretField
+          label="API key"
+          value={apiKey}
+          onChangeText={setApiKey}
+          placeholder={kind.includes('ollama') || kind === 'llama_cpp' ? 'Optional for local providers' : 'sk-…'}
+          hint="Paste from your provider dashboard. Stored in the device keychain and never included in backups."
+        />
         <PrimaryButton loading={saving} onPress={() => void save()}>Create provider</PrimaryButton>
-      </ScrollView>
+      </KeyboardScroll>
     </SafeAreaView>
   );
 }
