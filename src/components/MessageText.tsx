@@ -60,7 +60,7 @@ function BlockView({
             content={{ type: 'display', value: block.value, raw: block.raw }}
             appearance={mathAppearance(styles.body, theme, tone)}
             onOpenLink={openSafeLink}
-            dom={{ matchContents: true, scrollEnabled: false }}
+            dom={{ matchContents: true, scrollEnabled: false, containerStyle: styles.mathDomContainer }}
           />
         </View>
       );
@@ -273,7 +273,7 @@ function RichText({
           content={{ type: 'inlines', nodes }}
           appearance={mathAppearance(style, theme, tone)}
           onOpenLink={openSafeLink}
-          dom={{ matchContents: true, scrollEnabled: false }}
+          dom={{ matchContents: true, scrollEnabled: false, containerStyle: styles.mathDomContainer }}
         />
       </View>
     );
@@ -416,6 +416,9 @@ const styles = StyleSheet.create({
   strike: { textDecorationLine: 'line-through' },
   link: { textDecorationLine: 'underline' },
   mathHost: { minWidth: 0, alignSelf: 'stretch' },
+  // Expo SDK 54's matchContents measures both axes. Keep its measured height,
+  // but let the native layout own width so inline math cannot collapse a flex row.
+  mathDomContainer: { width: '100%' },
   hScrollWrap: { flexGrow: 0, alignSelf: 'stretch' },
   hScroll: { flexGrow: 0 },
   hScrollContent: { flexGrow: 0 },

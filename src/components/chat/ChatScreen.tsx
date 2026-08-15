@@ -4,6 +4,7 @@ import {
   FlatList,
   Keyboard,
   LayoutAnimation,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -289,6 +290,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
   };
 
   const allowedMimeTypes = model ? mimeTypesFor(model) : [];
+  const allowCamera = Boolean(model?.capabilities.image.value);
   const allowLibrary = Boolean(model && (model.capabilities.image.value || model.capabilities.video.value));
   const allowFiles = allowedMimeTypes.length > 0;
   const includeImages = Boolean(model?.capabilities.image.value);
@@ -358,6 +360,47 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     }
   };
 
+  const takePhoto = async () => {
+    if (!model?.capabilities.image.value) return;
+    try {
+      if (Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          const actions = permission.canAskAgain
+            ? [{ text: 'OK' }]
+            : [
+                { text: 'Cancel', style: 'cancel' as const },
+                { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+              ];
+          Alert.alert(
+            'Camera access required',
+            permission.canAskAgain
+              ? 'Allow camera access to take a photo and attach it.'
+              : 'Allow camera access in your device settings to take a photo and attach it.',
+            actions,
+          );
+          return;
+        }
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        cameraType: ImagePicker.CameraType.back,
+        quality: 1,
+      });
+      if (result.canceled) return;
+      await ingestPickedAssets(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          name: asset.fileName?.trim() || 'photo.jpg',
+          mimeType: asset.mimeType ?? 'image/jpeg',
+          ...(asset.fileSize !== undefined ? { size: asset.fileSize } : {}),
+        })),
+      );
+    } catch (error) {
+      Alert.alert('Could not take photo', error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const pickFromFiles = async () => {
     if (!allowedMimeTypes.length) return;
     const result = await DocumentPicker.getDocumentAsync({ type: allowedMimeTypes, multiple: true, copyToCacheDirectory: true });
@@ -396,7 +439,8 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
 
   const chooseAttachSource = (source: AttachSource) => {
     setShowAttachMenu(false);
-    if (source === 'library') void pickFromLibrary();
+    if (source === 'camera') void takePhoto();
+    else if (source === 'library') void pickFromLibrary();
     else void pickFromFiles();
   };
 
@@ -604,6 +648,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
             sending={sending}
             canAttach={Boolean(model)}
             attachMenuOpen={showAttachMenu}
+            allowCamera={allowCamera}
             allowLibrary={allowLibrary}
             allowFiles={allowFiles}
             includeImages={includeImages}

@@ -14,6 +14,7 @@ export function Composer({
   sending,
   canAttach,
   attachMenuOpen,
+  allowCamera,
   allowLibrary,
   allowFiles,
   includeImages,
@@ -33,6 +34,7 @@ export function Composer({
   sending: boolean;
   canAttach: boolean;
   attachMenuOpen: boolean;
+  allowCamera: boolean;
   allowLibrary: boolean;
   allowFiles: boolean;
   includeImages: boolean;
@@ -74,6 +76,7 @@ export function Composer({
       ) : null}
       {attachMenuOpen ? (
         <AttachSourceMenu
+          allowCamera={allowCamera}
           allowLibrary={allowLibrary}
           allowFiles={allowFiles}
           includeImages={includeImages}
@@ -85,7 +88,7 @@ export function Composer({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={attachMenuOpen ? 'Close attachment options' : 'Add attachment'}
-          accessibilityHint={attachMenuOpen || !allowLibrary || !allowFiles ? undefined : 'Choose photo library or files'}
+          accessibilityHint={attachMenuOpen || !allowLibrary || !allowFiles ? undefined : allowCamera ? 'Choose camera, photo library, or files' : 'Choose photo library or files'}
           disabled={!canAttach}
           onPress={onAttach}
           style={styles.side}

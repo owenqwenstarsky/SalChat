@@ -3,6 +3,7 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { MessageText } from '@/components/MessageText';
+import { messageBubbleLayout } from '@/components/chat/messageBubbleLayout';
 import { settingsActionLabel, type SettingsDestination } from '@/domain/configError';
 import type { AttachmentBlob, Message, MessagePart } from '@/domain/types';
 import { destinationForProviderError } from '@/network/errors';
@@ -54,7 +55,10 @@ export function MessageBubble({
   };
 
   return (
-    <Pressable onLongPress={reveal} style={[styles.message, user && styles.userMessage]}>
+    <Pressable
+      onLongPress={reveal}
+      style={[messageBubbleLayout.base, user ? messageBubbleLayout.user : messageBubbleLayout.assistant]}
+    >
       {pinned ? (
         <View style={[styles.pin, user && styles.userPin]}>
           <Ionicons name="pin" color={theme.accent} size={11} />
@@ -108,8 +112,6 @@ export function MessageBubble({
 }
 
 const styles = StyleSheet.create({
-  message: { maxWidth: '94%', alignSelf: 'flex-start' },
-  userMessage: { alignSelf: 'flex-end', maxWidth: '82%' },
   userBubble: { borderRadius: 20, borderBottomRightRadius: 6, paddingHorizontal: 14, paddingVertical: 10 },
   pin: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
   userPin: { justifyContent: 'flex-end' },

@@ -2,15 +2,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { font, radius, useTheme } from '@/theme';
 
-export type AttachSource = 'library' | 'files';
+export type AttachSource = 'camera' | 'library' | 'files';
 
 export function AttachSourceMenu({
+  allowCamera,
   allowLibrary,
   allowFiles,
   includeImages,
   includeVideos,
   onChoose,
 }: {
+  allowCamera: boolean;
   allowLibrary: boolean;
   allowFiles: boolean;
   includeImages: boolean;
@@ -27,6 +29,15 @@ export function AttachSourceMenu({
         accessibilityLabel="Attachment source"
         style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.line }]}
       >
+        {allowCamera ? (
+          <SourceRow
+            icon="camera-outline"
+            label="Take Photo"
+            detail="Use this device’s camera"
+            onPress={() => onChoose('camera')}
+          />
+        ) : null}
+        {allowCamera && (allowLibrary || allowFiles) ? <View style={[styles.rule, { backgroundColor: theme.line }]} /> : null}
         {allowLibrary ? (
           <SourceRow
             icon={includeImages ? 'images-outline' : 'videocam-outline'}
