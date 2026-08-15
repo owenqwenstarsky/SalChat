@@ -8,7 +8,7 @@ function fakeDb(overrides: Partial<SQLiteDatabase> = {}): SQLiteDatabase {
     getAllAsync: jest.fn().mockResolvedValue([]),
     runAsync: jest.fn().mockResolvedValue({ changes: 1, lastInsertRowId: 1 }),
   };
-  db.withExclusiveTransactionAsync = jest.fn(async (callback: (txn: SQLiteDatabase) => Promise<void>): Promise<void> => callback(db as unknown as SQLiteDatabase));
+  db.withTransactionAsync = jest.fn(async (callback: () => Promise<void>): Promise<void> => callback());
   Object.assign(db, overrides);
   return db as unknown as SQLiteDatabase;
 }
@@ -18,14 +18,14 @@ describe('SQLite persistence helpers', () => {
     const db = fakeDb({ getFirstAsync: jest.fn().mockResolvedValue({ user_version: 0 }) as never });
     await migrateDatabase(db);
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('journal_mode'));
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalled();
+    expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('busy_timeout'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS providers'));
   });
 
   it('skips schema creation when current and parses payload rows', async () => {
     const db = fakeDb({ getAllAsync: jest.fn().mockResolvedValue([{ payload: '{"id":"a"}' }]) as never });
     await migrateDatabase(db);
-    expect(db.withExclusiveTransactionAsync).not.toHaveBeenCalled();
+    expect(db.execAsync).not.toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE'));
     await expect(loadPayloads<{ id: string }>(db, 'providers')).resolves.toEqual([{ id: 'a' }]);
   });
 

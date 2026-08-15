@@ -34,7 +34,7 @@ const data: BackupData = {
 
 function fakeDb(): SQLiteDatabase {
   const db: Record<string, unknown> = { runAsync: jest.fn().mockResolvedValue({ changes: 1 }), execAsync: jest.fn().mockResolvedValue(undefined) };
-  db.withExclusiveTransactionAsync = jest.fn(async (callback: (txn: SQLiteDatabase) => Promise<void>) => callback(db as unknown as SQLiteDatabase));
+  db.withTransactionAsync = jest.fn(async (callback: () => Promise<void>) => callback());
   return db as unknown as SQLiteDatabase;
 }
 
@@ -53,7 +53,7 @@ describe('backup archive I/O', () => {
   it('restores relational records, references, settings, and attachment bytes', async () => {
     const db = fakeDb();
     await restoreBackupArchive(db, buildBackupArchive(data));
-    expect(db.withExclusiveTransactionAsync).toHaveBeenCalled();
+    expect(db.withTransactionAsync).toHaveBeenCalled();
     expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('message_attachments'), 'msg', 'a');
     expect(mockBackupFiles.get('/docs/sal-attachments/hash')).toEqual(new Uint8Array([1, 2, 3]));
   });

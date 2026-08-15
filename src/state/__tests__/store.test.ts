@@ -20,6 +20,7 @@ function fakeDb(): SQLiteDatabase {
     runAsync: jest.fn().mockResolvedValue({ changes: 1 }), execAsync: jest.fn().mockResolvedValue(undefined),
     getAllAsync: jest.fn().mockResolvedValue([]), getFirstAsync: jest.fn().mockResolvedValue({ count: 0 }),
   };
+  db.withTransactionAsync = jest.fn(async (callback: () => Promise<void>) => callback());
   db.withExclusiveTransactionAsync = jest.fn(async (callback: (txn: SQLiteDatabase) => Promise<void>) => callback(db as unknown as SQLiteDatabase));
   return db as unknown as SQLiteDatabase;
 }
@@ -66,5 +67,18 @@ describe('Sal state persistence', () => {
     useSalStore.setState({ providers: [provider], credentials: [credential], models: [model] });
     await useSalStore.getState().deleteProvider('p');
     expect(useSalStore.getState()).toMatchObject({ providers: [], credentials: [], models: [] });
+  });
+
+  it('writes attachment links once and skips them on unchanged stream updates', async () => {
+    const db = fakeDb();
+    useSalStore.setState({ db, messages: [] });
+    await useSalStore.getState().saveMessage(message);
+    expect(db.withTransactionAsync).toHaveBeenCalledTimes(1);
+    expect(db.runAsync).toHaveBeenCalledWith(expect.stringContaining('message_attachments'), message.id, 'a');
+    (db.runAsync as jest.Mock).mockClear();
+    (db.withTransactionAsync as jest.Mock).mockClear();
+    await useSalStore.getState().saveMessage({ ...message, updatedAt: '2026-01-02' });
+    expect(db.withTransactionAsync).not.toHaveBeenCalled();
+    expect(db.runAsync).not.toHaveBeenCalledWith(expect.stringContaining('message_attachments'), expect.anything(), expect.anything());
   });
 });

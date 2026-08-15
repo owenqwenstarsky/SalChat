@@ -3,27 +3,28 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 const DATABASE_VERSION = 1;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
-  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  // Stay on this connection. withExclusiveTransactionAsync opens a second native
+  // connection and Expo documents that other writes then fail with SQLITE_BUSY
+  // ("database is locked") during finalizeAsync.
+  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version < 1) {
-    await db.withExclusiveTransactionAsync(async (txn) => {
-      await txn.execAsync(`
-        CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY NOT NULL, provider_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS credentials_provider_idx ON credentials(provider_id);
-        CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY NOT NULL, provider_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS models_provider_idx ON models(provider_id);
-        CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY NOT NULL, conversation_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
-        CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id);
-        CREATE TABLE IF NOT EXISTS generations (id TEXT PRIMARY KEY NOT NULL, conversation_id TEXT NOT NULL, message_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY NOT NULL, sha256 TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS message_attachments (message_id TEXT NOT NULL, attachment_id TEXT NOT NULL, PRIMARY KEY(message_id, attachment_id));
-        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);
-      `);
-      await txn.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
-    });
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY NOT NULL, provider_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS credentials_provider_idx ON credentials(provider_id);
+      CREATE TABLE IF NOT EXISTS models (id TEXT PRIMARY KEY NOT NULL, provider_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS models_provider_idx ON models(provider_id);
+      CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY NOT NULL, conversation_id TEXT NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS messages_conversation_idx ON messages(conversation_id);
+      CREATE TABLE IF NOT EXISTS generations (id TEXT PRIMARY KEY NOT NULL, conversation_id TEXT NOT NULL, message_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY NOT NULL, sha256 TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS message_attachments (message_id TEXT NOT NULL, attachment_id TEXT NOT NULL, PRIMARY KEY(message_id, attachment_id));
+      CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY NOT NULL, payload TEXT NOT NULL);
+      PRAGMA user_version = ${DATABASE_VERSION};
+    `);
   }
 }
 

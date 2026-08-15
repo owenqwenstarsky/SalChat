@@ -82,8 +82,8 @@ export const useSalStore = create<SalState>((set, get) => ({
   deleteProvider: async (id) => {
     const db = requireDb(get());
     const credentials = get().credentials.filter((item) => item.providerId === id);
-    await Promise.all(credentials.map((credential) => get().deleteCredential(credential.id)));
-    await Promise.all(get().models.filter((model) => model.providerId === id).map((model) => get().deleteModel(model.id)));
+    for (const credential of credentials) await get().deleteCredential(credential.id);
+    for (const model of get().models.filter((item) => item.providerId === id)) await get().deleteModel(model.id);
     await deletePayload(db, 'providers', id);
     set((state) => ({ providers: state.providers.filter((item) => item.id !== id) }));
   },
@@ -123,11 +123,11 @@ export const useSalStore = create<SalState>((set, get) => ({
   deleteConversation: async (id) => {
     const db = requireDb(get());
     const messageIds = get().messages.filter((message) => message.conversationId === id).map((message) => message.id);
-    await db.withExclusiveTransactionAsync(async (txn) => {
-      await txn.runAsync('DELETE FROM generations WHERE conversation_id = ?', id);
-      await txn.runAsync('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)', id);
-      await txn.runAsync('DELETE FROM messages WHERE conversation_id = ?', id);
-      await txn.runAsync('DELETE FROM conversations WHERE id = ?', id);
+    await db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM generations WHERE conversation_id = ?', id);
+      await db.runAsync('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)', id);
+      await db.runAsync('DELETE FROM messages WHERE conversation_id = ?', id);
+      await db.runAsync('DELETE FROM conversations WHERE id = ?', id);
     });
     set((state) => ({
       conversations: state.conversations.filter((item) => item.id !== id),
@@ -138,12 +138,18 @@ export const useSalStore = create<SalState>((set, get) => ({
 
   saveMessage: async (message) => {
     const db = requireDb(get());
-    await upsertPayload(db, 'messages', message);
     const attachmentIds = message.parts.filter((part) => part.type === 'attachment').map((part) => part.attachmentId);
-    await db.withExclusiveTransactionAsync(async (txn) => {
-      await txn.runAsync('DELETE FROM message_attachments WHERE message_id = ?', message.id);
-      for (const attachmentId of attachmentIds) await txn.runAsync('INSERT OR IGNORE INTO message_attachments (message_id, attachment_id) VALUES (?, ?)', message.id, attachmentId);
-    });
+    if (attachmentsChanged(get().messages.find((item) => item.id === message.id), attachmentIds)) {
+      await db.withTransactionAsync(async () => {
+        await upsertPayload(db, 'messages', message);
+        await db.runAsync('DELETE FROM message_attachments WHERE message_id = ?', message.id);
+        for (const attachmentId of attachmentIds) {
+          await db.runAsync('INSERT OR IGNORE INTO message_attachments (message_id, attachment_id) VALUES (?, ?)', message.id, attachmentId);
+        }
+      });
+    } else {
+      await upsertPayload(db, 'messages', message);
+    }
     set((state) => ({ messages: replaceById(state.messages, message) }));
   },
 
@@ -183,4 +189,10 @@ function replaceById<T extends { id: string }>(items: T[], value: T): T[] {
   const index = items.findIndex((item) => item.id === value.id);
   if (index < 0) return [...items, value];
   return items.map((item) => (item.id === value.id ? value : item));
+}
+
+function attachmentsChanged(previous: Message | undefined, attachmentIds: string[]): boolean {
+  if (!previous) return attachmentIds.length > 0;
+  const previousIds = previous.parts.filter((part) => part.type === 'attachment').map((part) => part.attachmentId);
+  return previousIds.length !== attachmentIds.length || previousIds.some((id, index) => id !== attachmentIds[index]);
 }

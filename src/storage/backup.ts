@@ -70,8 +70,8 @@ export async function restoreBackupArchive(db: SQLiteDatabase, bytes: Uint8Array
     restoredAttachments.push({ ...attachment, storedUri: destination.uri });
   }
 
-  await db.withExclusiveTransactionAsync(async (txn) => {
-    await txn.execAsync(`
+  await db.withTransactionAsync(async () => {
+    await db.execAsync(`
       DELETE FROM message_attachments;
       DELETE FROM generations;
       DELETE FROM messages;
@@ -82,17 +82,17 @@ export async function restoreBackupArchive(db: SQLiteDatabase, bytes: Uint8Array
       DELETE FROM attachments;
       DELETE FROM settings;
     `);
-    for (const provider of manifest.data.providers) await txn.runAsync('INSERT INTO providers (id, payload, updated_at) VALUES (?, ?, ?)', provider.id, JSON.stringify(provider), provider.updatedAt);
-    for (const credential of manifest.data.credentials) await txn.runAsync('INSERT INTO credentials (id, provider_id, payload, updated_at) VALUES (?, ?, ?, ?)', credential.id, credential.providerId, JSON.stringify(credential), credential.updatedAt);
-    for (const model of manifest.data.models) await txn.runAsync('INSERT INTO models (id, provider_id, payload, updated_at) VALUES (?, ?, ?, ?)', model.id, model.providerId, JSON.stringify(model), model.updatedAt);
-    for (const conversation of manifest.data.conversations) await txn.runAsync('INSERT INTO conversations (id, payload, updated_at) VALUES (?, ?, ?)', conversation.id, JSON.stringify(conversation), conversation.updatedAt);
+    for (const provider of manifest.data.providers) await db.runAsync('INSERT INTO providers (id, payload, updated_at) VALUES (?, ?, ?)', provider.id, JSON.stringify(provider), provider.updatedAt);
+    for (const credential of manifest.data.credentials) await db.runAsync('INSERT INTO credentials (id, provider_id, payload, updated_at) VALUES (?, ?, ?, ?)', credential.id, credential.providerId, JSON.stringify(credential), credential.updatedAt);
+    for (const model of manifest.data.models) await db.runAsync('INSERT INTO models (id, provider_id, payload, updated_at) VALUES (?, ?, ?, ?)', model.id, model.providerId, JSON.stringify(model), model.updatedAt);
+    for (const conversation of manifest.data.conversations) await db.runAsync('INSERT INTO conversations (id, payload, updated_at) VALUES (?, ?, ?)', conversation.id, JSON.stringify(conversation), conversation.updatedAt);
     for (const message of manifest.data.messages) {
-      await txn.runAsync('INSERT INTO messages (id, conversation_id, payload, updated_at) VALUES (?, ?, ?, ?)', message.id, message.conversationId, JSON.stringify(message), message.updatedAt);
-      for (const part of message.parts) if (part.type === 'attachment') await txn.runAsync('INSERT OR IGNORE INTO message_attachments (message_id, attachment_id) VALUES (?, ?)', message.id, part.attachmentId);
+      await db.runAsync('INSERT INTO messages (id, conversation_id, payload, updated_at) VALUES (?, ?, ?, ?)', message.id, message.conversationId, JSON.stringify(message), message.updatedAt);
+      for (const part of message.parts) if (part.type === 'attachment') await db.runAsync('INSERT OR IGNORE INTO message_attachments (message_id, attachment_id) VALUES (?, ?)', message.id, part.attachmentId);
     }
-    for (const generation of manifest.data.generations) await txn.runAsync('INSERT INTO generations (id, conversation_id, message_id, payload, created_at) VALUES (?, ?, ?, ?, ?)', generation.id, generation.conversationId, generation.messageId, JSON.stringify(generation), generation.createdAt);
-    for (const attachment of restoredAttachments) await txn.runAsync('INSERT INTO attachments (id, sha256, payload, created_at) VALUES (?, ?, ?, ?)', attachment.id, attachment.sha256, JSON.stringify(attachment), attachment.createdAt);
-    await txn.runAsync('INSERT INTO settings (key, payload) VALUES (?, ?)', 'app', JSON.stringify(manifest.data.settings));
+    for (const generation of manifest.data.generations) await db.runAsync('INSERT INTO generations (id, conversation_id, message_id, payload, created_at) VALUES (?, ?, ?, ?, ?)', generation.id, generation.conversationId, generation.messageId, JSON.stringify(generation), generation.createdAt);
+    for (const attachment of restoredAttachments) await db.runAsync('INSERT INTO attachments (id, sha256, payload, created_at) VALUES (?, ?, ?, ?)', attachment.id, attachment.sha256, JSON.stringify(attachment), attachment.createdAt);
+    await db.runAsync('INSERT INTO settings (key, payload) VALUES (?, ?)', 'app', JSON.stringify(manifest.data.settings));
   });
 }
 

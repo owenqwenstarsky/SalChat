@@ -20,6 +20,7 @@ const image: AttachmentBlob = { id: 'a', sha256: 'hash', mimeType: 'image/png', 
 
 function fakeDb(): SQLiteDatabase {
   const db: Record<string, unknown> = { runAsync: jest.fn().mockResolvedValue({ changes: 1 }), getFirstAsync: jest.fn().mockResolvedValue({ count: 0 }) };
+  db.withTransactionAsync = jest.fn(async (callback: () => Promise<void>) => callback());
   db.withExclusiveTransactionAsync = jest.fn(async (callback: (txn: SQLiteDatabase) => Promise<void>) => callback(db as unknown as SQLiteDatabase));
   return db as unknown as SQLiteDatabase;
 }
