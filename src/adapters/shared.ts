@@ -1,5 +1,6 @@
 import type { ChatRequest, ResolvedAttachment } from './types';
 import type { Message, MessagePart } from '@/domain/types';
+import { buildSystemPrompt } from '@/chat/systemPrompt';
 
 export function structuredSettings(request: ChatRequest): Record<string, unknown> {
   const defaults = request.model.defaults;
@@ -15,7 +16,7 @@ export function structuredSettings(request: ChatRequest): Record<string, unknown
 }
 
 export function systemPrompt(request: ChatRequest): string {
-  return request.conversation.systemPrompt || request.model.defaults.systemPrompt;
+  return buildSystemPrompt(request);
 }
 
 export function messageText(message: Message): string {
