@@ -13,6 +13,13 @@ describe('provider error guidance', () => {
     expect(failure.guidance).toContain('Ollama');
   });
 
+  it('provides LiteLLM-specific LAN guidance', () => {
+    const failure = classifyProviderError({ kind: 'litellm', message: 'connection refused' });
+    expect(failure.code).toBe('connection_refused');
+    expect(failure.guidance).toContain('LiteLLM');
+    expect(failure.guidance).toContain('LAN');
+  });
+
   it('recognizes context, media, protocol and malformed response failures', () => {
     expect(classifyProviderError({ kind: 'openai_chat', body: 'context length exceeded' }).code).toBe('context_length');
     expect(classifyProviderError({ kind: 'llama_cpp', body: 'missing image mmproj' }).code).toBe('unsupported_media');

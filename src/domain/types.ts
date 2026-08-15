@@ -2,7 +2,8 @@ export type ProviderKind =
   | 'openai_chat'
   | 'ollama_native'
   | 'ollama_openai_chat'
-  | 'llama_cpp';
+  | 'llama_cpp'
+  | 'litellm';
 
 export type CapabilityMode = 'automatic' | 'supported' | 'unsupported';
 export type CapabilitySource = 'detected' | 'preset' | 'manual' | 'unknown';
@@ -59,7 +60,7 @@ export type IconSpec =
   | { type: 'emoji'; value: string }
   | { type: 'asset'; value: string };
 
-export type BrandLogo = 'openai' | 'anthropic' | 'ollama' | 'meta' | 'generic';
+export type BrandLogo = 'openai' | 'anthropic' | 'ollama' | 'meta' | 'litellm' | 'generic';
 
 export interface Provider {
   id: string;

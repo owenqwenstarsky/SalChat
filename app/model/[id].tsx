@@ -20,7 +20,7 @@ const CAPABILITIES: [keyof ModelCapabilities, string][] = [
   ['usageReporting', 'Token usage'], ['structuredOutput', 'Structured output'], ['toolCallRecognition', 'Tool-call recognition'],
 ];
 const EMOJIS = ['✦', '🧠', '🦉', '🪶', '🌿', '🛰️', '🧩', '🦙', '🐋', '⚡️', '🔭', '🎛️'];
-const LOGOS: BrandLogo[] = ['openai', 'anthropic', 'ollama', 'meta', 'generic'];
+const LOGOS: BrandLogo[] = ['openai', 'anthropic', 'ollama', 'meta', 'litellm', 'generic'];
 
 export default function ModelEditorScreen() {
   const { id, focus: focusParam } = useLocalSearchParams<{ id: string; focus?: string | string[] }>();

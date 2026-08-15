@@ -34,7 +34,6 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-sharing",
       [
         "expo-image-picker",
         {

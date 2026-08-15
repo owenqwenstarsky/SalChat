@@ -1,3 +1,4 @@
+import { LiteLlmAdapter } from '../litellm';
 import { LlamaCppAdapter } from '../llamaCpp';
 import { OllamaNativeAdapter } from '../ollamaNative';
 import { OllamaOpenAiAdapter } from '../ollamaOpenAi';
@@ -6,7 +7,7 @@ import { adapterFor } from '..';
 import { createDefaultCapabilities, createDefaultLimits } from '@/domain/modelConfig';
 import type { ChatRequest } from '../types';
 
-function request(kind: 'openai_chat' | 'ollama_native' | 'llama_cpp'): ChatRequest {
+function request(kind: 'openai_chat' | 'ollama_native' | 'llama_cpp' | 'litellm'): ChatRequest {
   const now = '2026-01-01';
   return {
     provider: { id: 'p', displayName: 'Provider', kind, baseUrl: kind === 'ollama_native' ? 'http://192.168.1.2:11434' : 'https://example.com/v1', icon: { type: 'emoji', value: 'P' }, lastCredentialId: null, createdAt: now, updatedAt: now },
@@ -62,6 +63,7 @@ describe('adapter wire formats', () => {
     expect(adapterFor('ollama_native')).toBeInstanceOf(OllamaNativeAdapter);
     expect(adapterFor('ollama_openai_chat')).toBeInstanceOf(OllamaOpenAiAdapter);
     expect(adapterFor('llama_cpp')).toBeInstanceOf(LlamaCppAdapter);
+    expect(adapterFor('litellm')).toBeInstanceOf(LiteLlmAdapter);
   });
 });
 
@@ -105,6 +107,91 @@ describe('adapter discovery and health checks', () => {
     input.provider.baseUrl = 'http://192.168.1.2:11434/v1';
     jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ capabilities: ['vision'], model_info: {} })).mockRejectedValueOnce(new Error('native route absent'));
     await expect(adapter.inspectModel(input.provider, input.model, input.credential)).resolves.toEqual(expect.objectContaining({ capabilities: expect.objectContaining({ image: true }) }));
+    await expect(adapter.inspectModel(input.provider, input.model, input.credential)).resolves.toEqual({});
+  });
+
+  it('discovers LiteLLM chat models from /v1/model/info and maps capabilities', async () => {
+    const adapter = new LiteLlmAdapter();
+    const input = request('litellm');
+    input.provider.baseUrl = 'http://192.168.1.2:4000';
+    input.model.wireId = 'gpt-4o';
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      data: [
+        {
+          model_name: 'gpt-4o',
+          model_info: {
+            mode: 'chat',
+            max_input_tokens: 128_000,
+            max_output_tokens: 16_384,
+            supports_vision: true,
+            supports_function_calling: true,
+            supports_response_schema: true,
+          },
+        },
+        { model_name: 'gpt-4o', model_info: { mode: 'chat', supports_vision: true } },
+        { model_name: 'embed-large', model_info: { mode: 'embedding' } },
+        { model_name: 'dall-e', model_info: { mode: 'image_generation' } },
+        { model_info: { mode: 'chat' } },
+      ],
+    }));
+    await expect(adapter.listModels(input.provider, input.credential)).resolves.toEqual([
+      {
+        wireId: 'gpt-4o',
+        displayName: 'gpt-4o',
+        metadata: {
+          capabilities: { image: true, toolCallRecognition: true, structuredOutput: true },
+          limits: { contextWindow: 128_000, maxOutputTokens: 16_384 },
+        },
+      },
+    ]);
+    await expect(adapter.inspectModel(input.provider, input.model, input.credential)).resolves.toEqual({
+      capabilities: { image: true, toolCallRecognition: true, structuredOutput: true },
+      limits: { contextWindow: 128_000, maxOutputTokens: 16_384 },
+    });
+  });
+
+  it('falls back to /v1/models when LiteLLM model info is unavailable', async () => {
+    const adapter = new LiteLlmAdapter();
+    const input = request('litellm');
+    jest.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({ ok: false, status: 404, headers: new Headers(), text: async () => 'not found' } as unknown as Response)
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: 'claude-sonnet' }] }))
+      .mockRejectedValueOnce(new Error('info route absent'));
+    await expect(adapter.listModels(input.provider, input.credential)).resolves.toEqual([
+      { wireId: 'claude-sonnet', displayName: 'claude-sonnet', metadata: {} },
+    ]);
+    await expect(adapter.inspectModel(input.provider, input.model, input.credential)).resolves.toEqual({});
+  });
+
+  it('keeps LiteLLM models with no mode, maps remaining info fields, and ignores unknown wire IDs', async () => {
+    const adapter = new LiteLlmAdapter();
+    const input = request('litellm');
+    input.model.wireId = 'missing-model';
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      data: [
+        {
+          model_name: 'grok',
+          model_info: {
+            max_tokens: 8192,
+            supports_audio_input: true,
+            supports_reasoning: true,
+            supports_system_messages: true,
+          },
+        },
+        { model_name: 'o4-mini', model_info: { mode: 'responses' } },
+      ],
+    }));
+    await expect(adapter.listModels(input.provider, input.credential)).resolves.toEqual([
+      {
+        wireId: 'grok',
+        displayName: 'grok',
+        metadata: {
+          capabilities: { audio: true, reasoning: true, systemMessages: true },
+          limits: { contextWindow: 8192 },
+        },
+      },
+      { wireId: 'o4-mini', displayName: 'o4-mini', metadata: {} },
+    ]);
     await expect(adapter.inspectModel(input.provider, input.model, input.credential)).resolves.toEqual({});
   });
 });

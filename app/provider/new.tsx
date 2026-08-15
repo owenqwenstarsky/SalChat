@@ -17,6 +17,7 @@ const KINDS: { kind: ProviderKind; label: string; url: string }[] = [
   { kind: 'ollama_native', label: 'Ollama', url: 'http://192.168.1.10:11434' },
   { kind: 'ollama_openai_chat', label: 'Ollama · Chat', url: 'http://192.168.1.10:11434/v1' },
   { kind: 'llama_cpp', label: 'llama.cpp', url: 'http://192.168.1.10:8080/v1' },
+  { kind: 'litellm', label: 'LiteLLM', url: 'http://192.168.1.10:4000' },
 ];
 
 export default function NewProviderScreen() {
@@ -34,7 +35,7 @@ export default function NewProviderScreen() {
   const chooseKind = (next: ProviderKind) => {
     const preset = KINDS.find((item) => item.kind === next)!;
     setKind(next); setBaseUrl(preset.url);
-    setDisplayName(next === 'ollama_native' || next === 'ollama_openai_chat' ? 'Ollama' : next === 'llama_cpp' ? 'llama.cpp' : 'OpenAI');
+    setDisplayName(next === 'ollama_native' || next === 'ollama_openai_chat' ? 'Ollama' : next === 'llama_cpp' ? 'llama.cpp' : next === 'litellm' ? 'LiteLLM' : 'OpenAI');
   };
 
   const save = async () => {
@@ -73,7 +74,7 @@ export default function NewProviderScreen() {
           label="API key"
           value={apiKey}
           onChangeText={setApiKey}
-          placeholder={kind.includes('ollama') || kind === 'llama_cpp' ? 'Optional for local providers' : 'sk-…'}
+          placeholder={kind.includes('ollama') || kind === 'llama_cpp' || kind === 'litellm' ? 'Optional for local providers' : 'sk-…'}
           hint="Paste from your provider dashboard. Stored in the device keychain and never included in backups."
         />
         <PrimaryButton loading={saving} onPress={() => void save()}>Create provider</PrimaryButton>

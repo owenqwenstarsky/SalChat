@@ -96,11 +96,13 @@ export function destinationForProviderError(
 function lanGuidance(kind: ProviderKind): string {
   if (kind.includes('ollama')) return 'Make sure Ollama is running, bound to the LAN interface, and that the phone uses the computer’s LAN address instead of localhost.';
   if (kind === 'llama_cpp') return 'Make sure llama-server is running with a LAN-accessible host and that the phone can reach its port.';
+  if (kind === 'litellm') return 'Make sure the LiteLLM proxy is running, bound to the LAN interface, and that the phone uses the computer’s LAN address instead of localhost.';
   return 'Check the provider URL, internet connection, DNS, and local-network permission.';
 }
 
 function protocolGuidance(kind: ProviderKind): string {
   if (kind === 'ollama_native') return 'This provider expects Ollama’s native /api/chat route. Choose Ollama (Chat Completions) for /v1/chat/completions.';
   if (kind === 'ollama_openai_chat') return 'This provider expects Ollama’s /v1/chat/completions compatibility route. Choose Ollama for native /api/chat.';
+  if (kind === 'litellm') return 'This provider expects LiteLLM’s OpenAI-compatible /v1/chat/completions route. Confirm the proxy URL and that the server is the LiteLLM proxy, not a provider dashboard.';
   return 'Verify the base URL and that the server exposes /v1/chat/completions.';
 }

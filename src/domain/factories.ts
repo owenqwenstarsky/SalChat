@@ -12,7 +12,7 @@ export function createProvider(kind: ProviderKind, displayName: string, baseUrl:
     displayName,
     kind,
     baseUrl,
-    icon: { type: 'logo', value: kind.includes('ollama') ? 'ollama' : kind === 'openai_chat' ? 'openai' : 'meta' },
+    icon: { type: 'logo', value: kind.includes('ollama') ? 'ollama' : kind === 'openai_chat' ? 'openai' : kind === 'litellm' ? 'litellm' : 'meta' },
     lastCredentialId: null,
     createdAt: timestamp,
     updatedAt: timestamp,

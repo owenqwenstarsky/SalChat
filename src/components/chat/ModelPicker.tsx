@@ -88,7 +88,7 @@ export function ModelPicker({
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFill },
+  backdrop: { ...StyleSheet.absoluteFillObject },
   // Keep the sheet above the full-screen backdrop on native platforms. Without
   // an explicit stacking order, the backdrop can receive row taps and close
   // the modal before the model's onPress runs.

@@ -204,7 +204,7 @@ function FooterLink({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  backdrop: { ...StyleSheet.absoluteFill },
+  backdrop: { ...StyleSheet.absoluteFillObject },
   drawer: { position: 'absolute', top: 0, bottom: 0, left: 0, width: DRAWER_WIDTH, paddingHorizontal: 14 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: 14 },
   brand: { fontSize: 22, fontFamily: font.bold, letterSpacing: -0.4 },

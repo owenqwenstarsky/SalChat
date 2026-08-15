@@ -6,12 +6,14 @@ Sal Chat is a local-first Expo assistant harness for OpenAI-compatible and local
 
 Requirements: Node.js, npm, and the Expo development environment for your target platform.
 
+This project targets **Expo SDK 54** so it opens in the App Store / Play Store Expo Go app (iOS client version `1017756`). Newer Expo Go builds from TestFlight or `eas go` will not load it.
+
 ```sh
 npm install
 npm start
 ```
 
-Use `npm run ios`, `npm run android`, or scan the Expo QR code. Local HTTP providers such as Ollama and llama.cpp require a development/native build with the included network permissions; the phone and server must be able to reach each other, and the provider URL must use the server's LAN address rather than `localhost`.
+Use `npm run ios`, `npm run android`, or scan the Expo QR code. They should install Expo Go from the store (not a newer temp/TestFlight client), then scan the QR code. Local HTTP providers such as Ollama and llama.cpp require a development/native build with the included network permissions; the phone and server must be able to reach each other, and the provider URL must use the server's LAN address rather than `localhost`.
 
 ## Provider modes
 
@@ -19,6 +21,7 @@ Use `npm run ios`, `npm run android`, or scan the Expo QR code. Local HTTP provi
 - Ollama native (`/api/chat`, `/api/tags`, and `/api/show`)
 - Ollama Chat Completions (OpenAI-compatible chat plus native model discovery)
 - llama.cpp (OpenAI-compatible chat with llama.cpp media extensions)
+- LiteLLM proxy (OpenAI-compatible chat plus `/v1/model/info` discovery; default port `4000`; virtual or master keys)
 
 Every provider can hold multiple named accounts. The selected account is stored per conversation, while the last account that completed a request successfully becomes that provider's default.
 
