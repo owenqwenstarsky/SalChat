@@ -9,6 +9,7 @@ import {
   View,
   type ScrollViewProps,
 } from 'react-native';
+import { FORM_MAX_WIDTH, useShellLayout } from '@/components/chat/useShellLayout';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { font, space, useTheme } from '@/theme';
@@ -46,6 +47,7 @@ export function Screen({
   onBack?: () => void;
 }>) {
   const theme = useTheme();
+  const { wide } = useShellLayout();
   const header = title || action || onBack ? (
     <View style={styles.header}>
       {onBack ? (
@@ -60,7 +62,7 @@ export function Screen({
   return (
     <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.background }]}>
       {header}
-      {scroll ? <KeyboardScroll contentContainerStyle={styles.content}>{children}</KeyboardScroll> : <View style={styles.fill}>{children}</View>}
+      {scroll ? <KeyboardScroll contentContainerStyle={[styles.content, wide && styles.contentWide]}>{children}</KeyboardScroll> : <View style={styles.fill}>{children}</View>}
     </SafeAreaView>
   );
 }
@@ -70,6 +72,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   content: { paddingHorizontal: space.xl, paddingBottom: 80 },
+  contentWide: { width: '100%', maxWidth: FORM_MAX_WIDTH, alignSelf: 'center' },
   header: {
     minHeight: 52,
     flexDirection: 'row',

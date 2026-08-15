@@ -1,4 +1,5 @@
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { alertDialog } from '@/components/Dialogs';
 import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -39,15 +40,15 @@ export default function AttachmentsScreen() {
                     </Text>
                   </View>
                   <View style={styles.actions}>
-                    <Pressable accessibilityLabel="Share attachment" onPress={() => void Sharing.shareAsync(item.storedUri)}>
+                    <Pressable accessibilityLabel="Share attachment" onPress={() => void shareAttachment(item.storedUri, item.originalName)}>
                       <Ionicons name="share-outline" size={20} color={theme.text} />
                     </Pressable>
                     <Pressable
                       accessibilityLabel="Delete attachment"
                       onPress={() =>
                         refs
-                          ? Alert.alert('Attachment is still in use', `It is referenced by ${refs} message${refs === 1 ? '' : 's'}. Remove those references first.`)
-                          : Alert.alert('Delete attachment?', 'This removes the local file permanently.', [
+                          ? alertDialog('Attachment is still in use', `It is referenced by ${refs} message${refs === 1 ? '' : 's'}. Remove those references first.`)
+                          : alertDialog('Delete attachment?', 'This removes the local file permanently.', [
                               { text: 'Cancel', style: 'cancel' },
                               { text: 'Delete', style: 'destructive', onPress: () => void deleteAttachment(item.id) },
                             ])
@@ -64,6 +65,19 @@ export default function AttachmentsScreen() {
       )}
     </Screen>
   );
+}
+
+function shareAttachment(uri: string, name: string): void {
+  if (Platform.OS === 'web') {
+    const link = document.createElement('a');
+    link.href = uri;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
+  void Sharing.shareAsync(uri);
 }
 
 function formatBytes(bytes: number): string {

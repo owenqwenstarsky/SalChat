@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { deletePayload, loadPayloads, loadSetting, migrateDatabase, saveSetting, upsertPayload } from '../database';
 
@@ -20,6 +21,19 @@ describe('SQLite persistence helpers', () => {
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('journal_mode'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('busy_timeout'));
     expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS providers'));
+  });
+
+  it('skips WAL on web while still enabling foreign keys', async () => {
+    const original = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    try {
+      const db = fakeDb({ getFirstAsync: jest.fn().mockResolvedValue({ user_version: 0 }) as never });
+      await migrateDatabase(db);
+      expect(db.execAsync).toHaveBeenCalledWith(expect.stringContaining('foreign_keys'));
+      expect(db.execAsync).not.toHaveBeenCalledWith(expect.stringContaining('journal_mode'));
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: original });
+    }
   });
 
   it('skips schema creation when current and parses payload rows', async () => {

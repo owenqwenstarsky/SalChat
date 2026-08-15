@@ -1,4 +1,4 @@
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AttachSourceMenu, type AttachSource } from '@/components/chat/AttachSourceMenu';
 import type { AttachmentBlob } from '@/domain/types';
@@ -24,6 +24,7 @@ export function Composer({
   onRemoveAttachment,
   onSend,
   onStop,
+  onDropFiles,
 }: {
   text: string;
   onChangeText: (value: string) => void;
@@ -44,10 +45,29 @@ export function Composer({
   onRemoveAttachment: (id: string) => void;
   onSend: () => void;
   onStop: () => void;
+  onDropFiles?: (files: { uri: string; name: string; mimeType: string; size?: number }[]) => void;
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.wrap}>
+    <View
+      style={styles.wrap}
+      {...(Platform.OS === 'web' && onDropFiles
+        ? {
+            onDragOver: (event: { preventDefault: () => void }) => event.preventDefault(),
+            onDrop: (event: { preventDefault: () => void; dataTransfer?: { files: FileList } }) => {
+              event.preventDefault();
+              const dropped = Array.from(event.dataTransfer?.files ?? []);
+              if (!dropped.length) return;
+              onDropFiles(dropped.map((file) => ({
+                uri: URL.createObjectURL(file),
+                name: file.name,
+                mimeType: file.type || 'application/octet-stream',
+                size: file.size,
+              })));
+            },
+          }
+        : {})}
+    >
       {pending.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pending} contentContainerStyle={styles.pendingRow}>
           {pending.map((attachmentId) => {
@@ -99,8 +119,15 @@ export function Composer({
           value={text}
           onChangeText={onChangeText}
           multiline
+          blurOnSubmit={false}
           placeholder={placeholder}
           placeholderTextColor={theme.muted}
+          onKeyPress={(event) => {
+            const native = event.nativeEvent as { key: string; shiftKey?: boolean };
+            if (native.key !== 'Enter' || native.shiftKey) return;
+            event.preventDefault();
+            if (canSend && !sending) onSend();
+          }}
           style={[styles.input, { color: theme.text }]}
         />
         {sending ? (

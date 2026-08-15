@@ -1,4 +1,4 @@
-import { classifyProviderError, destinationForProviderError } from '../errors';
+import { classifyProviderError, destinationForProviderError, lanGuidance } from '../errors';
 import { redactDiagnostic, redactHeaders, redactText } from '../redaction';
 
 describe('provider error guidance', () => {
@@ -18,6 +18,13 @@ describe('provider error guidance', () => {
     expect(failure.code).toBe('connection_refused');
     expect(failure.guidance).toContain('LiteLLM');
     expect(failure.guidance).toContain('LAN');
+  });
+
+  it('explains CORS and mixed content on web', () => {
+    expect(lanGuidance('openai_chat', 'web')).toContain('CORS');
+    expect(lanGuidance('openai_chat', 'web')).toContain('mixed content');
+    expect(lanGuidance('openai_chat', 'web')).toContain('LiteLLM');
+    expect(classifyProviderError({ kind: 'openai_chat', message: 'Load failed' }).code).toBe('network_offline');
   });
 
   it('recognizes context, media, protocol and malformed response failures', () => {

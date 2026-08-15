@@ -21,7 +21,8 @@ jest.mock('expo-file-system', () => {
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import type { AttachmentBlob } from '@/domain/types';
-import { buildBackupArchive, inspectBackupArchive, restoreBackupArchive, writeBackupArchive, type BackupData } from '../backup';
+import { Platform } from 'react-native';
+import { buildBackupArchive, downloadBackupArchive, inspectBackupArchive, readBackupArchive, restoreBackupArchive, writeBackupArchive, type BackupData } from '../backup';
 
 const attachment: AttachmentBlob = { id: 'a', sha256: 'hash', mimeType: 'image/png', originalName: 'x.png', byteSize: 3, storedUri: 'file://source', modality: 'image', createdAt: '2026', referenceCount: 1 };
 const data: BackupData = {
@@ -76,5 +77,73 @@ describe('backup archive I/O', () => {
 
     expect(manifest.data.settings.contextManagementDefault).toBe('automatic');
     expect(manifest.data.conversations[0]?.context).toEqual({ mode: 'inherit', note: '', pinnedMessageIds: [], checkpoint: null });
+  });
+
+  it('packs data-URL attachments and restores them inline on web', async () => {
+    const dataUrl = 'data:image/png;base64,AQID';
+    const archive = buildBackupArchive({
+      ...data,
+      attachments: [{ ...attachment, storedUri: dataUrl }],
+    });
+    expect(inspectBackupArchive(archive).data.attachments[0]).not.toHaveProperty('storedUri');
+
+    const original = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    try {
+      const db = fakeDb();
+      await restoreBackupArchive(db, archive);
+      expect(db.runAsync).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO attachments'),
+        'a',
+        'hash',
+        expect.stringContaining(dataUrl),
+        '2026',
+      );
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: original });
+    }
+  });
+
+  it('reads native backup files through the FileSystem adapter', async () => {
+    mockBackupFiles.set('file://backup', new Uint8Array([9, 8, 7]));
+    await expect(readBackupArchive('file://backup')).resolves.toEqual(new Uint8Array([9, 8, 7]));
+  });
+
+  it('downloads a zip in the browser and fetches selected backup bytes', async () => {
+    const original = Platform.OS;
+    const click = jest.fn();
+    const link = { href: '', download: '', click, remove: jest.fn() };
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'web' });
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: { createElement: () => link, body: { appendChild: jest.fn() } },
+    });
+    Object.defineProperty(globalThis, 'URL', {
+      configurable: true,
+      value: { createObjectURL: () => 'blob:backup', revokeObjectURL: jest.fn() },
+    });
+    Object.defineProperty(globalThis, 'Blob', {
+      configurable: true,
+      value: class MockBlob { constructor(public parts: unknown[]) {} },
+    });
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([4, 5, 6]).buffer,
+    } as Response);
+    try {
+      expect(() => downloadBackupArchive(new Uint8Array([1, 2, 3]))).not.toThrow();
+      expect(click).toHaveBeenCalled();
+      expect(link.download).toContain('.salchat');
+      await expect(readBackupArchive('blob:picked')).resolves.toEqual(new Uint8Array([4, 5, 6]));
+      (globalThis.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 404 } as Response);
+      await expect(readBackupArchive('blob:missing')).rejects.toThrow('Could not read');
+    } finally {
+      Object.defineProperty(Platform, 'OS', { configurable: true, value: original });
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('refuses browser downloads on native', () => {
+    expect(() => downloadBackupArchive(new Uint8Array([1]))).toThrow('Browser downloads');
   });
 });

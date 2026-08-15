@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { SettingsDestination } from '@/domain/configError';
 import type { ProviderKind } from '@/domain/types';
 import { redactText } from './redaction';
@@ -48,7 +49,7 @@ export function classifyProviderError(context: ErrorContext): ProviderFailure {
   const base = { status, providerMessage: raw ? redactText(raw).slice(0, 4000) : null, requestId: context.requestId ?? null };
 
   if (context.aborted) return { ...base, code: 'cancelled', title: 'Response stopped', guidance: 'The partial response has been kept. Retry when you are ready.', retryable: true };
-  if (/network request failed|failed to fetch|offline/.test(lower)) return { ...base, code: 'network_offline', title: 'Provider unreachable', guidance: lanGuidance(context.kind), retryable: true };
+  if (/network request failed|failed to fetch|offline|load failed|networkerror/.test(lower)) return { ...base, code: 'network_offline', title: 'Provider unreachable', guidance: lanGuidance(context.kind), retryable: true };
   if (/econnrefused|connection refused/.test(lower)) return { ...base, code: 'connection_refused', title: 'Connection refused', guidance: lanGuidance(context.kind), retryable: true };
   if (/timeout|timed out/.test(lower)) return { ...base, code: 'timeout', title: 'Provider timed out', guidance: 'Check the provider, model load, and network, then try again.', retryable: true };
   if (/certificate|ssl|tls/.test(lower)) return { ...base, code: 'tls_error', title: 'Secure connection failed', guidance: 'Check the provider certificate and device clock. Sal will not bypass invalid public TLS.', retryable: false };
@@ -93,7 +94,10 @@ export function destinationForProviderError(
   }
 }
 
-function lanGuidance(kind: ProviderKind): string {
+export function lanGuidance(kind: ProviderKind, platform = Platform.OS): string {
+  if (platform === 'web') {
+    return 'The browser blocked this request. HTTPS pages cannot call HTTP providers (mixed content). Local servers must allow this origin in CORS (Ollama: OLLAMA_ORIGINS, llama.cpp: --allowed-origins). Hosted OpenAI does not allow browser calls — put LiteLLM or another CORS-enabled HTTPS proxy in front.';
+  }
   if (kind.includes('ollama')) return 'Make sure Ollama is running, bound to the LAN interface, and that the phone uses the computer’s LAN address instead of localhost.';
   if (kind === 'llama_cpp') return 'Make sure llama-server is running with a LAN-accessible host and that the phone can reach its port.';
   if (kind === 'litellm') return 'Make sure the LiteLLM proxy is running, bound to the LAN interface, and that the phone uses the computer’s LAN address instead of localhost.';

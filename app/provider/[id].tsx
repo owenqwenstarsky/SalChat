@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { alertDialog } from '@/components/Dialogs';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
@@ -47,7 +48,7 @@ export default function ProviderDetailScreen() {
     setBusy('test');
     const result = await adapterFor(provider.kind).testConnection(provider, await resolveCredential(selectedCredential));
     setBusy(null);
-    Alert.alert(result.ok ? 'Connection ready' : result.failure?.title ?? 'Connection failed', result.ok ? `${result.message} ${result.latencyMs} ms` : result.failure?.guidance ?? result.message);
+    alertDialog(result.ok ? 'Connection ready' : result.failure?.title ?? 'Connection failed', result.ok ? `${result.message} ${result.latencyMs} ms` : result.failure?.guidance ?? result.message);
   };
   const discover = async () => {
     setBusy('discover');
@@ -64,8 +65,8 @@ export default function ProviderDetailScreen() {
         model = applyDetectedMetadata(model, details);
         await saveModel(model); added++;
       }
-      Alert.alert('Discovery complete', added ? `Added ${added} model${added === 1 ? '' : 's'}.` : 'All discovered models are already configured.');
-    } catch (error) { Alert.alert('Discovery failed', error instanceof Error ? error.message : String(error)); }
+      alertDialog('Discovery complete', added ? `Added ${added} model${added === 1 ? '' : 's'}.` : 'All discovered models are already configured.');
+    } catch (error) { alertDialog('Discovery failed', error instanceof Error ? error.message : String(error)); }
     finally { setBusy(null); }
   };
   const addAccount = async () => {
@@ -75,7 +76,7 @@ export default function ProviderDetailScreen() {
       let credential = createCredential(provider.id, accountName.trim());
       credential = await saveCredentialSecrets(credential, { apiKey: key, organization, project, headers });
       await saveCredential(credential); setAccountName(''); setKey(''); setOrganization(''); setProject(''); setHeadersText('{}');
-    } catch (error) { Alert.alert('Invalid account settings', error instanceof Error ? error.message : 'Custom headers must be a JSON object of names and values.'); }
+    } catch (error) { alertDialog('Invalid account settings', error instanceof Error ? error.message : 'Custom headers must be a JSON object of names and values.'); }
   };
   const setProviderIcon = async (icon: IconSpec) => saveProvider({ ...provider, icon, updatedAt: new Date().toISOString() });
   const pickProviderIcon = async () => {
@@ -98,8 +99,8 @@ export default function ProviderDetailScreen() {
       <Section title="Provider icon" description="Use a bundled company mark, emoji, random emoji, or your own image.">
         <View style={styles.iconChoices}>{(['openai', 'anthropic', 'ollama', 'meta', 'litellm', 'generic'] as BrandLogo[]).map((logo) => <Pressable key={logo} onPress={() => void setProviderIcon({ type: 'logo', value: logo })} style={[styles.iconChoice, { borderColor: provider.icon.type === 'logo' && provider.icon.value === logo ? theme.accent : theme.line }]}><BrandIcon icon={{ type: 'logo', value: logo }} size={36} /></Pressable>)}<Pressable onPress={() => void setProviderIcon({ type: 'emoji', value: ['✦', '🧠', '🦙', '🌿', '⚡️'][Math.floor(Math.random() * 5)]! })} style={[styles.iconChoice, { borderColor: theme.line }]}><Text style={styles.random}>🎲</Text></Pressable><Pressable onPress={() => void pickProviderIcon()} style={[styles.iconChoice, { borderColor: theme.line }]}><Ionicons name="image-outline" size={22} color={theme.text} /></Pressable></View>
       </Section>
-      <Section title="Accounts" description="Choose between these credentials directly from the chat composer.">
-        <Group>{credentials.map((credential, index) => <View key={credential.id}>{index ? <Divider /> : null}<View style={styles.row}><Text style={[styles.avatar, { backgroundColor: theme.accentSoft, color: theme.accent }]}>{credential.displayName.slice(0, 1).toUpperCase()}</Text><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{credential.displayName}</Text><Text style={[styles.meta, { color: theme.muted }]}>{credential.apiKeyRef ? 'API key stored securely' : 'No API key'}</Text></View>{provider.lastCredentialId === credential.id ? <Text style={[styles.current, { color: theme.positive }]}>Last used</Text> : null}</View></View>)}</Group>
+      <Section title="Accounts" description={Platform.OS === 'web' ? 'Credentials stay in this browser and are never included in backups.' : 'Choose between these credentials directly from the chat composer.'}>
+        <Group>{credentials.map((credential, index) => <View key={credential.id}>{index ? <Divider /> : null}<View style={styles.row}><Text style={[styles.avatar, { backgroundColor: theme.accentSoft, color: theme.accent }]}>{credential.displayName.slice(0, 1).toUpperCase()}</Text><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{credential.displayName}</Text><Text style={[styles.meta, { color: theme.muted }]}>{credential.apiKeyRef ? (Platform.OS === 'web' ? 'API key kept in this browser' : 'API key stored securely') : 'No API key'}</Text></View>{provider.lastCredentialId === credential.id ? <Text style={[styles.current, { color: theme.positive }]}>Last used</Text> : null}</View></View>)}</Group>
         <View style={styles.form}>
           <Field label="New account name" value={accountName} onChangeText={setAccountName} placeholder="Work" />
           <SecretField label="API key" value={key} onChangeText={setKey} placeholder="Optional" />
@@ -115,7 +116,7 @@ export default function ProviderDetailScreen() {
         <Group>{models.map((model, index) => <View key={model.id}>{index ? <Divider /> : null}<Pressable style={styles.row} onPress={() => router.push({ pathname: '/model/[id]', params: { id: model.id } })}><BrandIcon icon={model.icon} size={36} /><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{modelLabel(model)}</Text><Text style={[styles.meta, { color: theme.muted }]}>{model.wireId}</Text></View></Pressable></View>)}</Group>
         <View style={styles.form}><Field label="Manual model ID" value={wireId} onChangeText={setWireId} autoCapitalize="none" autoCorrect={false} placeholder="model-name:tag" /><PrimaryButton compact disabled={!wireId.trim()} onPress={() => void addModel()}>Add and configure</PrimaryButton></View>
       </Section>
-      <GhostButton danger onPress={() => Alert.alert('Delete provider?', 'Models and credentials will be removed. Existing chat messages keep their provenance labels.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteProvider(provider.id).then(() => router.replace('/models')) }])}>Delete provider</GhostButton>
+      <GhostButton danger onPress={() => alertDialog('Delete provider?', 'Models and credentials will be removed. Existing chat messages keep their provenance labels.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteProvider(provider.id).then(() => router.replace('/models')) }])}>Delete provider</GhostButton>
     </Screen>
   );
 }

@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { Platform } from 'react-native';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { DEFAULT_CONTEXT_MODE, normalizeConversation } from '@/domain/context';
 import type { AppSettings, AttachmentBlob, Conversation, CredentialProfile, Generation, Message, Model, Provider } from '@/domain/types';
@@ -41,15 +42,35 @@ export function buildBackupArchive(data: BackupData): Uint8Array {
     },
   };
   files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
-  for (const attachment of data.attachments) files[`blobs/${attachment.sha256}`] = new File(attachment.storedUri).bytesSync();
+  for (const attachment of data.attachments) files[`blobs/${attachment.sha256}`] = readStoredBytes(attachment.storedUri);
   return zipSync(files, { level: 6 });
 }
 
 export function writeBackupArchive(bytes: Uint8Array): string {
-  const file = new File(Paths.cache, `sal-chat-${new Date().toISOString().replace(/[:.]/g, '-')}.salchat`);
+  const file = new File(Paths.cache, backupFilename());
   file.create({ overwrite: true });
   file.write(bytes);
   return file.uri;
+}
+
+export function downloadBackupArchive(bytes: Uint8Array): void {
+  if (Platform.OS !== 'web') throw new Error('Browser downloads are only available on web.');
+  const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
+  const uri = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = uri;
+  link.download = backupFilename();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(uri), 0);
+}
+
+export async function readBackupArchive(uri: string): Promise<Uint8Array> {
+  if (Platform.OS !== 'web') return new File(uri).bytesSync();
+  const response = await fetch(uri);
+  if (!response.ok) throw new Error(`Could not read the selected backup (${response.status}).`);
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 export function inspectBackupArchive(bytes: Uint8Array): BackupManifest {
@@ -59,14 +80,22 @@ export function inspectBackupArchive(bytes: Uint8Array): BackupManifest {
 
 export async function restoreBackupArchive(db: SQLiteDatabase, bytes: Uint8Array): Promise<void> {
   const { manifest, files } = parseArchive(bytes);
-  const directory = new Directory(Paths.document, 'sal-attachments');
-  directory.create({ idempotent: true, intermediates: true });
+  const directory = Platform.OS === 'web' ? null : new Directory(Paths.document, 'sal-attachments');
+  directory?.create({ idempotent: true, intermediates: true });
   const restoredAttachments: AttachmentBlob[] = [];
   for (const attachment of manifest.data.attachments) {
+    const attachmentBytes = files[`blobs/${attachment.sha256}`]!;
+    if (!directory) {
+      restoredAttachments.push({
+        ...attachment,
+        storedUri: `data:${attachment.mimeType};base64,${bytesToBase64(attachmentBytes)}`,
+      });
+      continue;
+    }
     const destination = new File(directory, attachment.sha256);
     if (!destination.exists) {
       destination.create({ overwrite: false });
-      destination.write(files[`blobs/${attachment.sha256}`]!);
+      destination.write(attachmentBytes);
     }
     restoredAttachments.push({ ...attachment, storedUri: destination.uri });
   }
@@ -95,6 +124,27 @@ export async function restoreBackupArchive(db: SQLiteDatabase, bytes: Uint8Array
     for (const attachment of restoredAttachments) await db.runAsync('INSERT INTO attachments (id, sha256, payload, created_at) VALUES (?, ?, ?, ?)', attachment.id, attachment.sha256, JSON.stringify(attachment), attachment.createdAt);
     await db.runAsync('INSERT INTO settings (key, payload) VALUES (?, ?)', 'app', JSON.stringify(manifest.data.settings));
   });
+}
+
+function readStoredBytes(uri: string): Uint8Array {
+  if (!uri.startsWith('data:')) return new File(uri).bytesSync();
+  const encoded = uri.match(/^data:[^;,]+;base64,(.*)$/s)?.[1];
+  if (encoded === undefined) throw new Error('This attachment uses an unsupported browser data URL.');
+  const binary = atob(encoded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function backupFilename(): string {
+  return `sal-chat-${new Date().toISOString().replace(/[:.]/g, '-')}.salchat`;
 }
 
 function parseArchive(bytes: Uint8Array): { manifest: BackupManifest; files: Record<string, Uint8Array> } {

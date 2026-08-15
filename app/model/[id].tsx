@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type LayoutChangeEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
+import { alertDialog } from '@/components/Dialogs';
 import { BrandIcon } from '@/components/BrandIcon';
 import { KeyboardScroll } from '@/components/Screen';
 import { Divider, Field, GhostButton, Group, Pill, PrimaryButton, Section } from '@/components/UI';
@@ -64,14 +65,14 @@ export default function ModelEditorScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7, base64: true });
     if (result.canceled) return;
     const asset = result.assets[0];
-    if (!asset?.base64) { Alert.alert('Could not use image', 'The selected image could not be read.'); return; }
+    if (!asset?.base64) { alertDialog('Could not use image', 'The selected image could not be read.'); return; }
     setIcon({ type: 'asset', value: `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` });
   };
   const save = async () => {
     let raw: unknown;
-    try { raw = JSON.parse(rawText); } catch { Alert.alert('Invalid JSON', 'Advanced request parameters must be valid JSON.'); return; }
+    try { raw = JSON.parse(rawText); } catch { alertDialog('Invalid JSON', 'Advanced request parameters must be valid JSON.'); return; }
     const result = validateRawRequestOverrides(raw);
-    if (!result.valid) { Alert.alert('Request parameters need attention', result.errors.join('\n')); return; }
+    if (!result.valid) { alertDialog('Request parameters need attention', result.errors.join('\n')); return; }
     setSaving(true);
     await saveModel({ ...draft, rawRequestOverrides: raw as Record<string, unknown>, updatedAt: new Date().toISOString() });
     setSaving(false); router.back();
@@ -79,7 +80,7 @@ export default function ModelEditorScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
-      <View style={styles.nav}><Pressable onPress={() => dirty ? Alert.alert('Discard changes?', 'Your model edits have not been saved.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => router.back() }]) : router.back()}><Ionicons name="chevron-back" size={24} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Model</Text><PrimaryButton compact loading={saving} onPress={() => void save()}>Save</PrimaryButton></View>
+      <View style={styles.nav}><Pressable onPress={() => dirty ? alertDialog('Discard changes?', 'Your model edits have not been saved.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => router.back() }]) : router.back()}><Ionicons name="chevron-back" size={24} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Model</Text><PrimaryButton compact loading={saving} onPress={() => void save()}>Save</PrimaryButton></View>
       <KeyboardScroll ref={scrollRef} contentContainerStyle={styles.content}>
         <View style={styles.identity}><BrandIcon icon={draft.icon} size={52} /><View style={{ flex: 1 }}><Text style={[styles.hero, { color: theme.text }]}>{draft.displayName}</Text><Text style={[styles.provider, { color: theme.muted }]}>{provider.displayName}</Text></View></View>
         <Section title="Identity" description="The wire ID is sent exactly as written.">
@@ -115,7 +116,7 @@ export default function ModelEditorScreen() {
           <Field label="JSON object" value={rawText} onChangeText={setRawText} multiline autoCapitalize="none" autoCorrect={false} style={styles.code} />
           <Field label="Compatibility notes" value={draft.compatibilityNotes} onChangeText={(compatibilityNotes) => setDraft({ ...draft, compatibilityNotes })} multiline placeholder="Required flags, known quirks, or server setup" />
         </Section>
-        <GhostButton danger onPress={() => Alert.alert('Delete model?', 'Existing messages keep their saved provenance, but new chats cannot use this model.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteModel(draft.id).then(() => router.replace('/models')) }])}>Delete model</GhostButton>
+        <GhostButton danger onPress={() => alertDialog('Delete model?', 'Existing messages keep their saved provenance, but new chats cannot use this model.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteModel(draft.id).then(() => router.replace('/models')) }])}>Delete model</GhostButton>
       </KeyboardScroll>
     </SafeAreaView>
   );
