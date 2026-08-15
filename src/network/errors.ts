@@ -1,3 +1,4 @@
+import type { SettingsDestination } from '@/domain/configError';
 import type { ProviderKind } from '@/domain/types';
 import { redactText } from './redaction';
 
@@ -64,6 +65,32 @@ export function classifyProviderError(context: ErrorContext): ProviderFailure {
   if (status !== null && status >= 500) return { ...base, code: 'server_error', title: 'Provider failed to generate', guidance: 'Inspect the provider logs and the redacted response details, then retry.', retryable: true };
   if (/json|sse|ndjson|unexpected end|malformed/.test(lower)) return { ...base, code: 'malformed_response', title: 'Provider returned an unreadable response', guidance: 'Confirm the provider API type and version. The raw redacted response is available below.', retryable: false };
   return { ...base, code: 'unknown', title: 'Provider request failed', guidance: 'Review the account, model configuration, and redacted provider details.', retryable: false };
+}
+
+export function destinationForProviderError(
+  code: string,
+  context: { modelId: string; providerId: string },
+): SettingsDestination | null {
+  switch (code) {
+    case 'unsupported_media':
+      return { kind: 'model', modelId: context.modelId, focus: 'capabilities' };
+    case 'context_length':
+      return { kind: 'model', modelId: context.modelId, focus: 'limits' };
+    case 'invalid_parameter':
+      return { kind: 'model', modelId: context.modelId, focus: 'advanced' };
+    case 'model_missing':
+      return { kind: 'model', modelId: context.modelId };
+    case 'authentication':
+    case 'authorization':
+    case 'quota':
+    case 'protocol_mismatch':
+    case 'connection_refused':
+    case 'network_offline':
+    case 'tls_error':
+      return { kind: 'provider', providerId: context.providerId };
+    default:
+      return null;
+  }
 }
 
 function lanGuidance(kind: ProviderKind): string {

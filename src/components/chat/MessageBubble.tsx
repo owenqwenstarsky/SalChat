@@ -3,11 +3,21 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { MessageText } from '@/components/MessageText';
+import { settingsActionLabel, type SettingsDestination } from '@/domain/configError';
 import type { AttachmentBlob, Message, MessagePart } from '@/domain/types';
+import { destinationForProviderError } from '@/network/errors';
 import { useSalStore } from '@/state/store';
 import { font, useTheme } from '@/theme';
 
-export function MessageBubble({ message, attachments }: { message: Message; attachments: AttachmentBlob[] }) {
+export function MessageBubble({
+  message,
+  attachments,
+  onOpenSettings,
+}: {
+  message: Message;
+  attachments: AttachmentBlob[];
+  onOpenSettings?: (destination: SettingsDestination) => void;
+}) {
   const theme = useTheme();
   const settings = useSalStore((state) => state.settings);
   const generations = useSalStore((state) => state.generations);
@@ -19,10 +29,21 @@ export function MessageBubble({ message, attachments }: { message: Message; atta
   const reasoning = message.parts.filter((part): part is Extract<MessagePart, { type: 'reasoning' }> => part.type === 'reasoning').map((part) => part.text).join('');
   const files = message.parts.filter((part): part is Extract<MessagePart, { type: 'attachment' }> => part.type === 'attachment');
 
+  const destination =
+    !user && generation?.errorCode
+      ? destinationForProviderError(generation.errorCode, {
+          modelId: generation.provenance.modelId,
+          providerId: generation.provenance.providerId,
+        })
+      : null;
+
   const reveal = () => {
     Alert.alert(user ? 'Message' : 'Response', undefined, [
       { text: 'Copy', onPress: () => void Clipboard.setStringAsync(text) },
       ...(!user && generation ? [{ text: showProvenance ? 'Hide details' : 'Show details', onPress: () => setShowProvenance((value) => !value) }] : []),
+      ...(destination && onOpenSettings
+        ? [{ text: settingsActionLabel(destination), onPress: () => onOpenSettings(destination) }]
+        : []),
       { text: 'Cancel', style: 'cancel' },
     ]);
   };

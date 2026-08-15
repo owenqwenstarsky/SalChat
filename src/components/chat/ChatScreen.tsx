@@ -10,6 +10,7 @@ import { HistoryDrawer } from '@/components/chat/HistoryDrawer';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ModelPicker } from '@/components/chat/ModelPicker';
 import { sendMessage, stopGeneration } from '@/chat/engine';
+import { ConfigurationError, settingsActionLabel, settingsHref, type SettingsDestination } from '@/domain/configError';
 import { createConversation, createId } from '@/domain/factories';
 import { latestConversationWithMessages, preferredModel, unusedEmptyConversations } from '@/domain/conversations';
 import type { Message, Model } from '@/domain/types';
@@ -75,7 +76,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     if (incompatible.length) {
       Alert.alert('This history contains unsupported media', `${next.displayName} is not configured for ${incompatible.join(', ')} input.`, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Configure model', onPress: () => router.push({ pathname: '/model/[id]', params: { id: next.id } }) },
+        { text: 'Configure model', onPress: () => openSettings({ kind: 'model', modelId: next.id, focus: 'capabilities' }) },
         { text: 'Fork text-only', onPress: () => void forkTextOnly(next) },
       ]);
       return;
@@ -125,7 +126,11 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       ...(model.capabilities.video.value ? model.limits.videoMimeTypes.value : []),
     ];
     if (!types.length) {
-      Alert.alert('Text-only model', 'Enable an attachment capability in this model’s configuration first.');
+      alertWithSettings(
+        'This model does not have attachment support enabled.',
+        'Turn on image, audio, or video input in this model’s settings.',
+        { kind: 'model', modelId: model.id, focus: 'capabilities' },
+      );
       return;
     }
     const result = await DocumentPicker.getDocumentAsync({ type: types.length ? types : '*/*', multiple: true, copyToCacheDirectory: true });
@@ -184,7 +189,11 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     } catch (error) {
       setText(outgoing);
       setPending(outgoingAttachments);
-      Alert.alert('Cannot send', error instanceof Error ? error.message : String(error));
+      if (error instanceof ConfigurationError) {
+        alertWithSettings('Cannot send', error.message, error.destination);
+      } else {
+        Alert.alert('Cannot send', error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setSending(false);
     }
@@ -216,7 +225,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
           data={messages}
           keyExtractor={(item) => item.id}
           contentContainerStyle={[styles.messages, !messages.length && styles.center]}
-          renderItem={({ item }) => <MessageBubble message={item} attachments={attachments} />}
+          renderItem={({ item }) => <MessageBubble message={item} attachments={attachments} onOpenSettings={openSettings} />}
           ListEmptyComponent={
             <View style={styles.welcome}>
               <Text style={[styles.welcomeTitle, { color: theme.text }]}>{model ? 'Ready when you are.' : 'Add a provider to start.'}</Text>
@@ -292,6 +301,17 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       />
     </SafeAreaView>
   );
+}
+
+function openSettings(destination: SettingsDestination): void {
+  router.push(settingsHref(destination));
+}
+
+function alertWithSettings(title: string, message: string, destination: SettingsDestination): void {
+  Alert.alert(title, message, [
+    { text: 'Cancel', style: 'cancel' },
+    { text: settingsActionLabel(destination), onPress: () => openSettings(destination) },
+  ]);
 }
 
 function incompatibleAttachments(

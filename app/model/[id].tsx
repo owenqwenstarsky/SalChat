@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View, type LayoutChangeEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { BrandIcon } from '@/components/BrandIcon';
 import { Divider, Field, GhostButton, Group, Pill, PrimaryButton, Section } from '@/components/UI';
+import { isSettingsFocus, type SettingsFocus } from '@/domain/configError';
 import { validateRawRequestOverrides } from '@/domain/modelConfig';
 import type { BrandLogo, IconSpec, Model, ModelCapabilities, ModelLimits } from '@/domain/types';
 import { useSalStore } from '@/state/store';
@@ -21,7 +22,7 @@ const EMOJIS = ['✦', '🧠', '🦉', '🪶', '🌿', '🛰️', '🧩', '🦙'
 const LOGOS: BrandLogo[] = ['openai', 'anthropic', 'ollama', 'meta', 'generic'];
 
 export default function ModelEditorScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, focus: focusParam } = useLocalSearchParams<{ id: string; focus?: string | string[] }>();
   const theme = useTheme();
   const stored = useSalStore((state) => state.models.find((item) => item.id === id));
   const provider = useSalStore((state) => state.providers.find((item) => item.id === stored?.providerId));
@@ -30,8 +31,21 @@ export default function ModelEditorScreen() {
   const [draft, setDraft] = useState<Model | null>(() => stored ? JSON.parse(JSON.stringify(stored)) as Model : null);
   const [rawText, setRawText] = useState(() => JSON.stringify(stored?.rawRequestOverrides ?? {}, null, 2));
   const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const rawFocus = Array.isArray(focusParam) ? focusParam[0] : focusParam;
+  const focus = isSettingsFocus(rawFocus) ? rawFocus : undefined;
+  const [focusY, setFocusY] = useState<number | null>(null);
   const dirty = useMemo(() => draft && stored ? JSON.stringify(draft) !== JSON.stringify(stored) || rawText !== JSON.stringify(stored.rawRequestOverrides, null, 2) : false, [draft, rawText, stored]);
+  useEffect(() => {
+    if (focusY == null) return;
+    scrollRef.current?.scrollTo({ y: focusY, animated: true });
+  }, [focusY]);
   if (!draft || !provider) return null;
+
+  const scrollToFocus = (section: SettingsFocus) => (event: LayoutChangeEvent) => {
+    if (focus !== section) return;
+    setFocusY(Math.max(0, event.nativeEvent.layout.y - 12));
+  };
 
   const updateCapability = (key: keyof ModelCapabilities, mode: 'automatic' | 'supported' | 'unsupported') => {
     setDraft((current) => current ? ({ ...current, capabilities: { ...current.capabilities, [key]: { ...current.capabilities[key], mode, value: mode === 'automatic' ? current.capabilities[key].value : mode === 'supported', source: mode === 'automatic' ? 'unknown' : 'manual' } } }) : current);
@@ -65,7 +79,7 @@ export default function ModelEditorScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <View style={styles.nav}><Pressable onPress={() => dirty ? Alert.alert('Discard changes?', 'Your model edits have not been saved.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => router.back() }]) : router.back()}><Ionicons name="chevron-back" size={24} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Model</Text><PrimaryButton compact loading={saving} onPress={() => void save()}>Save</PrimaryButton></View>
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         <View style={styles.identity}><BrandIcon icon={draft.icon} size={52} /><View style={{ flex: 1 }}><Text style={[styles.hero, { color: theme.text }]}>{draft.displayName}</Text><Text style={[styles.provider, { color: theme.muted }]}>{provider.displayName}</Text></View></View>
         <Section title="Identity" description="The wire ID is sent exactly as written.">
           <Field label="Display name" value={draft.displayName} onChangeText={(displayName) => setDraft({ ...draft, displayName })} />
@@ -76,11 +90,11 @@ export default function ModelEditorScreen() {
           <View style={styles.switchRow}><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>Enabled</Text><Text style={[styles.small, { color: theme.muted }]}>Disabled models remain configured but cannot be selected.</Text></View><Switch value={draft.enabled} onValueChange={(enabled) => setDraft({ ...draft, enabled })} trackColor={{ true: theme.accent }} /></View>
         </Section>
 
-        <Section title="Capabilities" description="Automatic values use metadata when available. Manual On or Off always wins.">
+        <Section title="Capabilities" description="Automatic values use metadata when available. Manual On or Off always wins." onLayout={scrollToFocus('capabilities')}>
           <Group>{CAPABILITIES.map(([key, label], index) => { const field = draft.capabilities[key]; return <View key={key}>{index ? <Divider /> : null}<View style={styles.capability}><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{label}</Text><Text style={[styles.small, { color: theme.muted }]}>{field.mode === 'automatic' ? `Automatic · ${field.source}` : `Manual · ${field.value ? 'supported' : 'unsupported'}`}</Text></View><View style={styles.segment}>{(['automatic', 'supported', 'unsupported'] as const).map((mode) => <Pressable key={mode} onPress={() => updateCapability(key, mode)} style={[styles.segmentItem, { backgroundColor: field.mode === mode ? theme.accentSoft : 'transparent' }]}><Text style={[styles.segmentText, { color: field.mode === mode ? theme.accent : theme.muted }]}>{mode === 'automatic' ? 'A' : mode === 'supported' ? 'On' : 'Off'}</Text></Pressable>)}</View></View></View>; })}</Group>
         </Section>
 
-        <Section title="Limits" description="Leave a numeric value blank when the provider’s limit is unknown.">
+        <Section title="Limits" description="Leave a numeric value blank when the provider’s limit is unknown." onLayout={scrollToFocus('limits')}>
           <View style={styles.twoCol}><View style={{ flex: 1 }}><Field label="Context window" keyboardType="number-pad" value={draft.limits.contextWindow.value?.toString() ?? ''} onChangeText={(value) => setLimit('contextWindow', value)} /></View><View style={{ flex: 1 }}><Field label="Max output" keyboardType="number-pad" value={draft.limits.maxOutputTokens.value?.toString() ?? ''} onChangeText={(value) => setLimit('maxOutputTokens', value)} /></View></View>
           <View style={styles.twoCol}><View style={{ flex: 1 }}><Field label="Max files" keyboardType="number-pad" value={draft.limits.maxAttachmentCount.value?.toString() ?? ''} onChangeText={(value) => setLimit('maxAttachmentCount', value)} /></View><View style={{ flex: 1 }}><Field label="Max file bytes" keyboardType="number-pad" value={draft.limits.maxFileBytes.value?.toString() ?? ''} onChangeText={(value) => setLimit('maxFileBytes', value)} /></View></View>
           <Field label="Max request bytes" keyboardType="number-pad" value={draft.limits.maxRequestBytes.value?.toString() ?? ''} onChangeText={(value) => setLimit('maxRequestBytes', value)} />
@@ -96,7 +110,7 @@ export default function ModelEditorScreen() {
           <Field label="Stop sequences" value={draft.defaults.stopSequences.join(', ')} onChangeText={(value) => setDraft({ ...draft, defaults: { ...draft.defaults, stopSequences: value.split(',').map((item) => item.trim()).filter(Boolean) } })} hint="Comma-separated" />
         </Section>
 
-        <Section title="Advanced request parameters" description="Provider-specific JSON is merged without changing Sal’s model, messages, stream, or credential fields.">
+        <Section title="Advanced request parameters" description="Provider-specific JSON is merged without changing Sal’s model, messages, stream, or credential fields." onLayout={scrollToFocus('advanced')}>
           <Field label="JSON object" value={rawText} onChangeText={setRawText} multiline autoCapitalize="none" autoCorrect={false} style={styles.code} />
           <Field label="Compatibility notes" value={draft.compatibilityNotes} onChangeText={(compatibilityNotes) => setDraft({ ...draft, compatibilityNotes })} multiline placeholder="Required flags, known quirks, or server setup" />
         </Section>

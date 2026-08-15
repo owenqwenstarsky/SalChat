@@ -68,13 +68,60 @@ describe('chat send lifecycle', () => {
 
   it('rejects media that the configured model does not support before writing messages', async () => {
     reset({}, [image]);
-    await expect(sendMessage({ conversationId: 'v', text: 'Look', attachmentIds: ['a'] })).rejects.toThrow('not configured for image');
+    await expect(sendMessage({ conversationId: 'v', text: 'Look', attachmentIds: ['a'] })).rejects.toMatchObject({
+      name: 'ConfigurationError',
+      message: expect.stringContaining('not configured for image'),
+      destination: { kind: 'model', modelId: 'm', focus: 'capabilities' },
+    });
     expect(useSalStore.getState().messages).toEqual([]);
+  });
+
+  it('rejects oversized attachments with a limits destination', async () => {
+    reset(
+      {
+        capabilities: { ...createDefaultCapabilities('openai_chat'), image: { value: true, mode: 'supported', source: 'manual' } },
+        limits: { ...createDefaultLimits('openai_chat'), maxFileBytes: { value: 1, mode: 'supported', source: 'manual' } },
+      },
+      [{ ...image, byteSize: 8 }],
+    );
+    await expect(sendMessage({ conversationId: 'v', text: 'Look', attachmentIds: ['a'] })).rejects.toMatchObject({
+      destination: { kind: 'model', modelId: 'm', focus: 'limits' },
+    });
+  });
+
+  it('rejects too many attachments with a limits destination', async () => {
+    reset(
+      {
+        capabilities: { ...createDefaultCapabilities('openai_chat'), image: { value: true, mode: 'supported', source: 'manual' } },
+        limits: { ...createDefaultLimits('openai_chat'), maxAttachmentCount: { value: 0, mode: 'supported', source: 'manual' } },
+      },
+      [image],
+    );
+    await expect(sendMessage({ conversationId: 'v', text: 'Look', attachmentIds: ['a'] })).rejects.toMatchObject({
+      name: 'ConfigurationError',
+      destination: { kind: 'model', modelId: 'm', focus: 'limits' },
+    });
   });
 
   it('requires an explicit account when the provider has accounts', async () => {
     reset();
     useSalStore.setState({ conversations: [{ ...conversation, selectedCredentialId: null }], providers: [{ ...provider, lastCredentialId: null }] });
-    await expect(sendMessage({ conversationId: 'v', text: 'Hi' })).rejects.toThrow('Choose an account');
+    await expect(sendMessage({ conversationId: 'v', text: 'Hi' })).rejects.toMatchObject({
+      name: 'ConfigurationError',
+      destination: { kind: 'provider', providerId: 'p' },
+    });
+  });
+
+  it('sends missing-model and missing-provider failures to the models list', async () => {
+    reset();
+    useSalStore.setState({ conversations: [{ ...conversation, selectedModelId: null }] });
+    await expect(sendMessage({ conversationId: 'v', text: 'Hi' })).rejects.toMatchObject({
+      destination: { kind: 'models' },
+    });
+    reset();
+    useSalStore.setState({ providers: [] });
+    await expect(sendMessage({ conversationId: 'v', text: 'Hi' })).rejects.toMatchObject({
+      destination: { kind: 'models' },
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { classifyProviderError } from '../errors';
+import { classifyProviderError, destinationForProviderError } from '../errors';
 import { redactDiagnostic, redactHeaders, redactText } from '../redaction';
 
 describe('provider error guidance', () => {
@@ -27,6 +27,33 @@ describe('provider error guidance', () => {
   ] as const)('covers transport and fallback failure %j', (patch, code) => {
     expect(classifyProviderError({ kind: 'openai_chat', ...patch })).toEqual(expect.objectContaining({ code }));
   });
+});
+
+describe('provider error destinations', () => {
+  const context = { modelId: 'm', providerId: 'p' };
+
+  it.each([
+    ['unsupported_media', { kind: 'model', modelId: 'm', focus: 'capabilities' }],
+    ['context_length', { kind: 'model', modelId: 'm', focus: 'limits' }],
+    ['invalid_parameter', { kind: 'model', modelId: 'm', focus: 'advanced' }],
+    ['model_missing', { kind: 'model', modelId: 'm' }],
+    ['authentication', { kind: 'provider', providerId: 'p' }],
+    ['authorization', { kind: 'provider', providerId: 'p' }],
+    ['quota', { kind: 'provider', providerId: 'p' }],
+    ['protocol_mismatch', { kind: 'provider', providerId: 'p' }],
+    ['connection_refused', { kind: 'provider', providerId: 'p' }],
+    ['network_offline', { kind: 'provider', providerId: 'p' }],
+    ['tls_error', { kind: 'provider', providerId: 'p' }],
+  ] as const)('routes %s to settings', (code, destination) => {
+    expect(destinationForProviderError(code, context)).toEqual(destination);
+  });
+
+  it.each(['timeout', 'rate_limit', 'model_loading', 'cancelled', 'server_error', 'malformed_response', 'unknown'] as const)(
+    'leaves retryable or generic %s without a settings action',
+    (code) => {
+      expect(destinationForProviderError(code, context)).toBeNull();
+    },
+  );
 });
 
 describe('diagnostic redaction', () => {

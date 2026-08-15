@@ -1,5 +1,6 @@
 import { adapterFor } from '@/adapters';
 import type { AdapterEvent, ResolvedAttachment } from '@/adapters/types';
+import { ConfigurationError } from '@/domain/configError';
 import { createId } from '@/domain/factories';
 import type { Generation, Message, MessagePart } from '@/domain/types';
 import { classifyProviderError } from '@/network/errors';
@@ -20,12 +21,14 @@ export async function sendMessage(input: SendInput): Promise<void> {
   const conversation = state.conversations.find((item) => item.id === input.conversationId);
   if (!conversation) throw new Error('Conversation not found.');
   const model = state.models.find((item) => item.id === conversation.selectedModelId);
-  if (!model) throw new Error('Choose a model before sending.');
+  if (!model) throw new ConfigurationError('Choose a model before sending.', { kind: 'models' });
   const provider = state.providers.find((item) => item.id === model.providerId);
-  if (!provider) throw new Error('The selected model provider no longer exists.');
+  if (!provider) throw new ConfigurationError('The selected model provider no longer exists.', { kind: 'models' });
   const credentialId = conversation.selectedCredentialId ?? provider.lastCredentialId;
   const credential = state.credentials.find((item) => item.id === credentialId) ?? null;
-  if (state.credentials.some((item) => item.providerId === provider.id) && !credential) throw new Error('Choose an account for this provider before sending.');
+  if (state.credentials.some((item) => item.providerId === provider.id) && !credential) {
+    throw new ConfigurationError('Choose an account for this provider before sending.', { kind: 'provider', providerId: provider.id });
+  }
 
   const selectedAttachments = (input.attachmentIds ?? []).map((id) => state.attachments.find((item) => item.id === id)).filter((item) => item !== undefined);
   validateAttachments(model, selectedAttachments);
@@ -129,13 +132,24 @@ function appendTextPart(parts: MessagePart[], type: 'text' | 'reasoning', delta:
 }
 
 function validateAttachments(model: ReturnType<typeof useSalStore.getState>['models'][number], attachments: ReturnType<typeof useSalStore.getState>['attachments']): void {
+  const destination = { kind: 'model' as const, modelId: model.id };
   const maxCount = model.limits.maxAttachmentCount.value;
-  if (maxCount !== null && attachments.length > maxCount) throw new Error(`${model.displayName} allows at most ${maxCount} attachments.`);
+  if (maxCount !== null && attachments.length > maxCount) {
+    throw new ConfigurationError(`${model.displayName} allows at most ${maxCount} attachments.`, { ...destination, focus: 'limits' });
+  }
   for (const attachment of attachments) {
-    if (attachment.modality === 'image' && !model.capabilities.image.value) throw new Error(`${model.displayName} is not configured for image input.`);
-    if (attachment.modality === 'audio' && !model.capabilities.audio.value) throw new Error(`${model.displayName} is not configured for audio input.`);
-    if (attachment.modality === 'video' && !model.capabilities.video.value) throw new Error(`${model.displayName} is not configured for video input.`);
+    if (attachment.modality === 'image' && !model.capabilities.image.value) {
+      throw new ConfigurationError(`${model.displayName} is not configured for image input.`, { ...destination, focus: 'capabilities' });
+    }
+    if (attachment.modality === 'audio' && !model.capabilities.audio.value) {
+      throw new ConfigurationError(`${model.displayName} is not configured for audio input.`, { ...destination, focus: 'capabilities' });
+    }
+    if (attachment.modality === 'video' && !model.capabilities.video.value) {
+      throw new ConfigurationError(`${model.displayName} is not configured for video input.`, { ...destination, focus: 'capabilities' });
+    }
     const maxBytes = model.limits.maxFileBytes.value;
-    if (maxBytes !== null && attachment.byteSize > maxBytes) throw new Error(`${attachment.originalName} exceeds this model’s configured file-size limit.`);
+    if (maxBytes !== null && attachment.byteSize > maxBytes) {
+      throw new ConfigurationError(`${attachment.originalName} exceeds this model’s configured file-size limit.`, { ...destination, focus: 'limits' });
+    }
   }
 }

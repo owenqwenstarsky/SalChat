@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 import { font, radius, space, useTheme } from '@/theme';
 
 export function PrimaryButton({
@@ -71,10 +71,11 @@ export function Section({
   description,
   children,
   action,
-}: PropsWithChildren<{ title: string; description?: string; action?: ReactNode }>) {
+  onLayout,
+}: PropsWithChildren<{ title: string; description?: string; action?: ReactNode; onLayout?: (event: LayoutChangeEvent) => void }>) {
   const theme = useTheme();
   return (
-    <View style={styles.section}>
+    <View style={styles.section} onLayout={onLayout}>
       <View style={styles.sectionHeader}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
