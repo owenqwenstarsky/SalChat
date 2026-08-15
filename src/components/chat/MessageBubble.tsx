@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { alertDialog } from '@/components/Dialogs';
 import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { MessageText } from '@/components/MessageText';
@@ -43,7 +44,7 @@ export function MessageBubble({
       : null;
 
   const reveal = () => {
-    Alert.alert(user ? 'Message' : 'Response', undefined, [
+    alertDialog(user ? 'Message' : 'Response', undefined, [
       { text: 'Copy', onPress: () => void Clipboard.setStringAsync(text) },
       ...(onTogglePin ? [{ text: pinned ? 'Unpin from context' : 'Pin to context', onPress: onTogglePin }] : []),
       ...(!user && generation ? [{ text: showProvenance ? 'Hide details' : 'Show details', onPress: () => setShowProvenance((value) => !value) }] : []),
@@ -57,6 +58,9 @@ export function MessageBubble({
   return (
     <Pressable
       onLongPress={reveal}
+      {...(Platform.OS === 'web'
+        ? { onContextMenu: (event: { preventDefault: () => void }) => { event.preventDefault(); reveal(); } }
+        : {})}
       style={[messageBubbleLayout.base, user ? messageBubbleLayout.user : messageBubbleLayout.assistant]}
     >
       {pinned ? (

@@ -15,33 +15,38 @@ npm start
 
 Use `npm run ios`, `npm run android`, or scan the Expo QR code. They should install Expo Go from the store (not a newer temp/TestFlight client), then scan the QR code. Local HTTP providers such as Ollama and llama.cpp require a development/native build with the included network permissions; the phone and server must be able to reach each other, and the provider URL must use the server's LAN address rather than `localhost`.
 
+```sh
+npm run web
+```
+
+The browser app is the same Expo Router client. On a laptop it docks chat history on the left; a narrow window keeps the overlay drawer. Data stays in this origin’s SQLite database. API keys are kept in `localStorage` and are never included in backups.
+
 ## Deploy the web app
 
-The web build is configured as a client-rendered Expo Router app. Both deployment targets add the cross-origin isolation headers required by Expo SQLite's WebAssembly worker and send deep links back through `index.html`.
+The web build is a client-rendered Expo Router app. Dev, preview, and hosted targets send `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` so Expo SQLite’s WebAssembly worker can use `SharedArrayBuffer`. Deep links rewrite through `index.html`.
 
-### Netlify
-
-The included `netlify.toml` builds and publishes `dist`.
+### Local preview
 
 ```sh
 npm run build:web
 npm run preview:web
-npx netlify deploy --prod
 ```
 
-In the Netlify UI, importing this repository requires no custom build settings. For another static host, publish `dist`, rewrite unknown routes to `/index.html`, and serve every route with `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`.
+### Netlify
+
+The included `netlify.toml` builds and publishes `dist`. Import the repository in the Netlify UI; no custom build settings are required. For another static host, publish `dist`, rewrite unknown routes to `/index.html`, and serve the same COOP/COEP headers.
 
 ### Railway
 
-The included `Dockerfile` builds the Expo web export and serves it with Caddy. `railway.json` configures Railway's deployment health check at `/health`; Caddy listens on Railway's injected `PORT` automatically.
+The included `Dockerfile` builds the Expo web export and serves it with Caddy. `railway.json` checks `/health`. Caddy listens on Railway’s injected `PORT`.
 
 1. In Railway, create a project and choose **Deploy from GitHub repo**.
-2. Select this repository. Railway detects the root `Dockerfile`; no build or start command is needed.
+2. Select this repository. Railway detects the root `Dockerfile`.
 3. After the first deployment, open **Settings → Networking → Generate Domain**.
 
 No Railway variables are required for the web app itself.
 
-Web data remains local to the browser. API keys and custom authentication headers are kept in `sessionStorage`, survive reloads in the same tab, and are cleared when that tab session ends; they are never included in backups. File attachments are stored in the browser's local SQLite database. Provider endpoints must allow browser CORS requests from the deployed origin, and HTTPS pages can only call endpoints permitted by the browser's mixed-content and private-network rules.
+The browser calls providers directly. HTTPS pages cannot call cleartext HTTP (mixed content). Local servers such as Ollama and llama.cpp must allow this origin in CORS (`OLLAMA_ORIGINS`, llama.cpp `--allowed-origins`). Hosted OpenAI does not allow browser calls; put LiteLLM or another CORS-enabled HTTPS proxy in front.
 
 ## Provider modes
 
@@ -66,7 +71,7 @@ Compaction uses the chat's selected provider, model, and account as a separate r
 ## Data and security
 
 - SQLite stores providers, model metadata, conversations, and message history.
-- SecureStore holds API keys and sensitive headers separately.
+- Native apps keep API keys in SecureStore. The web app keeps them in `localStorage`. Keys are never included in backups.
 - Attachments are content-addressed with SHA-256 and deduplicated.
 - Version 2 backups contain configuration, layered conversation context, history, media, and uploaded icons, but no credentials. Version 1 archives remain importable with safe context defaults.
 - Diagnostics redact tokens, authorization headers, and common secret-shaped values.

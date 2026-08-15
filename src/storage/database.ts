@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 const DATABASE_VERSION = 1;
@@ -6,7 +7,9 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Stay on this connection. withExclusiveTransactionAsync opens a second native
   // connection and Expo documents that other writes then fail with SQLITE_BUSY
   // ("database is locked") during finalizeAsync.
-  await db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+  // WASM SQLite does not give us the native WAL contract.
+  const journal = Platform.OS === 'web' ? '' : 'PRAGMA journal_mode = WAL; ';
+  await db.execAsync(`${journal}PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;`);
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version < 1) {
