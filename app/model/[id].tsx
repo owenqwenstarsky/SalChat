@@ -5,11 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { BrandIcon } from '@/components/BrandIcon';
-import { Divider, Field, GhostButton, Pill, PrimaryButton, Section } from '@/components/UI';
+import { Divider, Field, GhostButton, Group, Pill, PrimaryButton, Section } from '@/components/UI';
 import { validateRawRequestOverrides } from '@/domain/modelConfig';
 import type { BrandLogo, IconSpec, Model, ModelCapabilities, ModelLimits } from '@/domain/types';
 import { useSalStore } from '@/state/store';
-import { radius, space, useTheme } from '@/theme';
+import { space, useTheme } from '@/theme';
 
 const CAPABILITIES: [keyof ModelCapabilities, string][] = [
   ['text', 'Text input and output'], ['image', 'Image input'], ['audio', 'Audio input'], ['video', 'Video input'],
@@ -64,9 +64,9 @@ export default function ModelEditorScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
-      <View style={styles.nav}><Pressable onPress={() => dirty ? Alert.alert('Discard changes?', 'Your model edits have not been saved.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => router.back() }]) : router.back()}><Ionicons name="chevron-back" size={27} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Model configuration</Text><PrimaryButton compact loading={saving} onPress={() => void save()}>Save</PrimaryButton></View>
+      <View style={styles.nav}><Pressable onPress={() => dirty ? Alert.alert('Discard changes?', 'Your model edits have not been saved.', [{ text: 'Keep editing', style: 'cancel' }, { text: 'Discard', style: 'destructive', onPress: () => router.back() }]) : router.back()}><Ionicons name="chevron-back" size={24} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Model</Text><PrimaryButton compact loading={saving} onPress={() => void save()}>Save</PrimaryButton></View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <View style={styles.identity}><BrandIcon icon={draft.icon} size={64} /><View style={{ flex: 1 }}><Text style={[styles.hero, { color: theme.text }]}>{draft.displayName}</Text><Text style={[styles.provider, { color: theme.muted }]}>{provider.displayName}</Text></View></View>
+        <View style={styles.identity}><BrandIcon icon={draft.icon} size={52} /><View style={{ flex: 1 }}><Text style={[styles.hero, { color: theme.text }]}>{draft.displayName}</Text><Text style={[styles.provider, { color: theme.muted }]}>{provider.displayName}</Text></View></View>
         <Section title="Identity" description="The wire ID is sent exactly as written.">
           <Field label="Display name" value={draft.displayName} onChangeText={(displayName) => setDraft({ ...draft, displayName })} />
           <Field label="Wire model ID" value={draft.wireId} onChangeText={(wireId) => setDraft({ ...draft, wireId })} autoCapitalize="none" autoCorrect={false} />
@@ -77,7 +77,7 @@ export default function ModelEditorScreen() {
         </Section>
 
         <Section title="Capabilities" description="Automatic values use metadata when available. Manual On or Off always wins.">
-          <View style={[styles.group, { borderColor: theme.line, backgroundColor: theme.surface }]}>{CAPABILITIES.map(([key, label], index) => { const field = draft.capabilities[key]; return <View key={key}>{index ? <Divider /> : null}<View style={styles.capability}><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{label}</Text><Text style={[styles.small, { color: theme.muted }]}>{field.mode === 'automatic' ? `Automatic · ${field.source}` : `Manual · ${field.value ? 'supported' : 'unsupported'}`}</Text></View><View style={styles.segment}>{(['automatic', 'supported', 'unsupported'] as const).map((mode) => <Pressable key={mode} onPress={() => updateCapability(key, mode)} style={[styles.segmentItem, { backgroundColor: field.mode === mode ? theme.accentSoft : 'transparent' }]}><Text style={[styles.segmentText, { color: field.mode === mode ? theme.accent : theme.muted }]}>{mode === 'automatic' ? 'A' : mode === 'supported' ? 'On' : 'Off'}</Text></Pressable>)}</View></View></View>; })}</View>
+          <Group>{CAPABILITIES.map(([key, label], index) => { const field = draft.capabilities[key]; return <View key={key}>{index ? <Divider /> : null}<View style={styles.capability}><View style={{ flex: 1 }}><Text style={[styles.name, { color: theme.text }]}>{label}</Text><Text style={[styles.small, { color: theme.muted }]}>{field.mode === 'automatic' ? `Automatic · ${field.source}` : `Manual · ${field.value ? 'supported' : 'unsupported'}`}</Text></View><View style={styles.segment}>{(['automatic', 'supported', 'unsupported'] as const).map((mode) => <Pressable key={mode} onPress={() => updateCapability(key, mode)} style={[styles.segmentItem, { backgroundColor: field.mode === mode ? theme.accentSoft : 'transparent' }]}><Text style={[styles.segmentText, { color: field.mode === mode ? theme.accent : theme.muted }]}>{mode === 'automatic' ? 'A' : mode === 'supported' ? 'On' : 'Off'}</Text></Pressable>)}</View></View></View>; })}</Group>
         </Section>
 
         <Section title="Limits" description="Leave a numeric value blank when the provider’s limit is unknown.">
@@ -100,16 +100,16 @@ export default function ModelEditorScreen() {
           <Field label="JSON object" value={rawText} onChangeText={setRawText} multiline autoCapitalize="none" autoCorrect={false} style={styles.code} />
           <Field label="Compatibility notes" value={draft.compatibilityNotes} onChangeText={(compatibilityNotes) => setDraft({ ...draft, compatibilityNotes })} multiline placeholder="Required flags, known quirks, or server setup" />
         </Section>
-        <GhostButton danger onPress={() => Alert.alert('Delete model?', 'Existing messages keep their saved provenance, but new chats cannot use this model.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteModel(draft.id).then(() => router.replace('/(tabs)/models')) }])}>Delete model</GhostButton>
+        <GhostButton danger onPress={() => Alert.alert('Delete model?', 'Existing messages keep their saved provenance, but new chats cannot use this model.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => void deleteModel(draft.id).then(() => router.replace('/models')) }])}>Delete model</GhostButton>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 }, nav: { height: 60, paddingHorizontal: space.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, navTitle: { fontSize: 15, fontWeight: '800' }, content: { padding: space.xl, paddingBottom: 100 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 34 }, hero: { fontSize: 28, fontWeight: '800', letterSpacing: -0.7 }, provider: { fontSize: 13, marginTop: 3 }, label: { fontSize: 13, fontWeight: '700', marginBottom: 8 }, choiceRow: { marginBottom: 18 },
-  iconChoice: { borderWidth: 2, borderRadius: 14, padding: 4, marginRight: 8 }, switchRow: { flexDirection: 'row', alignItems: 'center', minHeight: 60, gap: 12 }, name: { fontSize: 14, fontWeight: '700' }, small: { fontSize: 11, lineHeight: 15, marginTop: 3 },
-  group: { borderWidth: 1, borderRadius: radius.lg, overflow: 'hidden' }, capability: { minHeight: 68, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 9 }, segment: { flexDirection: 'row', gap: 2 }, segmentItem: { minWidth: 34, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }, segmentText: { fontSize: 10, fontWeight: '800' },
+  safe: { flex: 1 }, nav: { height: 56, paddingHorizontal: space.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, navTitle: { fontSize: 16, fontWeight: '600' }, content: { padding: space.xl, paddingBottom: 100 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 28 }, hero: { fontSize: 24, fontWeight: '700', letterSpacing: -0.4 }, provider: { fontSize: 13, marginTop: 3 }, label: { fontSize: 13, fontWeight: '600', marginBottom: 8 }, choiceRow: { marginBottom: 18 },
+  iconChoice: { borderWidth: 1, borderRadius: 14, padding: 4, marginRight: 8 }, switchRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56, gap: 12 }, name: { fontSize: 14, fontWeight: '600' }, small: { fontSize: 11, lineHeight: 15, marginTop: 3 },
+  capability: { minHeight: 64, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 9 }, segment: { flexDirection: 'row', gap: 2 }, segmentItem: { minWidth: 34, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center' }, segmentText: { fontSize: 10, fontWeight: '700' },
   twoCol: { flexDirection: 'row', gap: 10 }, code: { fontFamily: 'monospace', fontSize: 13, minHeight: 150 },
 });

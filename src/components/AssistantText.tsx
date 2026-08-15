@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { radius, useTheme } from '@/theme';
+import { font, radius, useTheme } from '@/theme';
 
 /**
  * A deliberately small, linear-time renderer for common model output. Keeping
@@ -77,12 +77,12 @@ function inlineCode(value: string, backgroundColor: string): ReactNode[] {
 }
 
 const styles = StyleSheet.create({
-  body: { fontSize: 16, lineHeight: 24 },
+  body: { fontSize: 16, lineHeight: 24, fontFamily: font.regular },
   bullet: { paddingLeft: 7 },
-  heading: { fontSize: 21, lineHeight: 28, fontWeight: '800', marginTop: 10, marginBottom: 3 },
+  heading: { fontSize: 20, lineHeight: 26, fontFamily: font.bold, marginTop: 10, marginBottom: 3 },
   smallHeading: { fontSize: 17, lineHeight: 24 },
-  code: { borderWidth: 1, borderRadius: radius.md, padding: 12, marginVertical: 7 },
+  code: { borderRadius: radius.md, padding: 12, marginVertical: 7 },
   codeText: { fontFamily: 'monospace', fontSize: 13, lineHeight: 19 },
-  language: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', marginBottom: 7 },
+  language: { fontSize: 10, fontFamily: font.semibold, textTransform: 'uppercase', marginBottom: 7 },
   inlineCode: { fontFamily: 'monospace', fontSize: 14 },
 });

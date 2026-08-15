@@ -61,12 +61,12 @@ export default function NewProviderScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.background }]}>
       <View style={styles.nav}><Pressable onPress={() => router.back()}><Ionicons name="close" size={27} color={theme.text} /></Pressable><Text style={[styles.navTitle, { color: theme.text }]}>Add provider</Text><View style={{ width: 27 }} /></View>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-        <Text style={[styles.step, { color: theme.accent }]}>PROTOCOL</Text>
+        <Text style={[styles.step, { color: theme.muted }]}>Protocol</Text>
         <Text style={[styles.hero, { color: theme.text }]}>How does this provider speak?</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pills}>{KINDS.map((item) => <Pill key={item.kind} active={kind === item.kind} onPress={() => chooseKind(item.kind)}>{item.label}</Pill>)}</ScrollView>
         <Field label="Display name" value={displayName} onChangeText={setDisplayName} placeholder="My provider" />
         <Field label="Base URL" value={baseUrl} onChangeText={setBaseUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" hint="Public URLs must use HTTPS. Private LAN HTTP endpoints show a one-time warning." />
-        <Text style={[styles.step, { color: theme.accent }]}>FIRST ACCOUNT</Text>
+        <Text style={[styles.step, { color: theme.muted }]}>First account</Text>
         <Field label="Account name" value={accountName} onChangeText={setAccountName} placeholder="Personal, Work, Team…" />
         <Field label="API key" value={apiKey} onChangeText={setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={kind.includes('ollama') || kind === 'llama_cpp' ? 'Optional for local providers' : 'sk-…'} hint="Stored in the device secure keychain and never included in backups." />
         <PrimaryButton loading={saving} onPress={() => void save()}>Create provider</PrimaryButton>
@@ -80,6 +80,6 @@ function confirmLanWarning(): Promise<boolean> {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 }, nav: { height: 58, paddingHorizontal: space.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, navTitle: { fontWeight: '800', fontSize: 16 },
-  content: { padding: space.xl, paddingBottom: 80 }, step: { fontSize: 11, letterSpacing: 1.7, fontWeight: '800', marginBottom: 8 }, hero: { fontSize: 29, lineHeight: 34, fontWeight: '800', letterSpacing: -0.8, marginBottom: 20 }, pills: { marginBottom: 26, marginHorizontal: -space.xl, paddingHorizontal: space.xl },
+  safe: { flex: 1 }, nav: { height: 56, paddingHorizontal: space.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, navTitle: { fontWeight: '600', fontSize: 16 },
+  content: { padding: space.xl, paddingBottom: 80 }, step: { fontSize: 13, fontWeight: '600', marginBottom: 6 }, hero: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.4, marginBottom: 18 }, pills: { marginBottom: 26, marginHorizontal: -space.xl, paddingHorizontal: space.xl },
 });

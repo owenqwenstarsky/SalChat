@@ -17,6 +17,12 @@ export const palette = {
   darkLine: '#393531',
 };
 
+export const font = {
+  regular: 'SourceSans3_400Regular',
+  semibold: 'SourceSans3_600SemiBold',
+  bold: 'SourceSans3_700Bold',
+} as const;
+
 export interface SalTheme {
   background: string;
   surface: string;
@@ -25,6 +31,8 @@ export interface SalTheme {
   line: string;
   accent: string;
   accentSoft: string;
+  well: string;
+  overlay: string;
   positive: string;
   danger: string;
   isDark: boolean;
@@ -35,9 +43,35 @@ export function useTheme(): SalTheme {
   const preference = useSalStore((state) => state.settings.colorScheme);
   const isDark = preference === 'dark' || (preference === 'system' && system === 'dark');
   return isDark
-    ? { background: palette.dark, surface: palette.darkRaised, text: palette.darkText, muted: palette.darkMuted, line: palette.darkLine, accent: '#F08369', accentSoft: '#4A2B25', positive: '#91A87B', danger: '#FF8B78', isDark }
-    : { background: palette.cream, surface: palette.paper, text: palette.ink, muted: palette.muted, line: palette.line, accent: palette.coral, accentSoft: palette.coralSoft, positive: palette.moss, danger: '#B64135', isDark };
+    ? {
+        background: palette.dark,
+        surface: palette.darkRaised,
+        text: palette.darkText,
+        muted: palette.darkMuted,
+        line: palette.darkLine,
+        accent: '#F08369',
+        accentSoft: '#4A2B25',
+        well: '#2A2724',
+        overlay: 'rgba(0,0,0,0.46)',
+        positive: '#91A87B',
+        danger: '#FF8B78',
+        isDark,
+      }
+    : {
+        background: palette.cream,
+        surface: palette.paper,
+        text: palette.ink,
+        muted: palette.muted,
+        line: palette.line,
+        accent: palette.coral,
+        accentSoft: palette.coralSoft,
+        well: '#E9E1D7',
+        overlay: 'rgba(32,29,26,0.28)',
+        positive: palette.moss,
+        danger: '#B64135',
+        isDark,
+      };
 }
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, huge: 48 } as const;
-export const radius = { sm: 8, md: 14, lg: 22, pill: 999 } as const;
+export const radius = { sm: 10, md: 14, lg: 20, pill: 999 } as const;
