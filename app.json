@@ -1,13 +1,21 @@
 {
   "expo": {
-    "name": "sal-chat",
+    "name": "Sal Chat",
     "slug": "sal-chat",
     "version": "1.0.0",
+    "scheme": "salchat",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "app.salchat.mobile",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Sal Chat connects directly to model providers on your local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -16,10 +24,38 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": true,
+      "package": "app.salchat.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Sal Chat to attach images and videos to model conversations.",
+          "cameraPermission": "Allow Sal Chat to take a photo for a model conversation.",
+          "microphonePermission": "Allow Sal Chat to include audio when recording video."
+        }
+      ],
+      "expo-document-picker",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }
