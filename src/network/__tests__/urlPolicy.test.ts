@@ -12,6 +12,7 @@ describe('provider URL policy', () => {
   it('allows public HTTPS without a warning and explains physical-device localhost', () => {
     expect(validateProviderUrl('https://example.com')).toEqual(expect.objectContaining({ valid: true, requiresLanWarning: false }));
     expect(validateProviderUrl('http://localhost:11434').message).toContain('phone');
+    expect(validateProviderUrl('http://localhost:11434', 'web').message).toBeUndefined();
   });
 
   it('rejects public HTTP and unsupported protocols', () => {

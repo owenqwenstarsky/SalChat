@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { alertDialog, confirmDialog } from '@/components/Dialogs';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -40,7 +41,7 @@ export default function NewProviderScreen() {
 
   const save = async () => {
     const policy = validateProviderUrl(baseUrl);
-    if (!displayName.trim() || !policy.valid || !policy.normalizedUrl) { Alert.alert('Check provider details', policy.message ?? 'Add a display name and valid URL.'); return; }
+    if (!displayName.trim() || !policy.valid || !policy.normalizedUrl) { alertDialog('Check provider details', policy.message ?? 'Add a display name and valid URL.'); return; }
     if (policy.requiresLanWarning) {
       const accepted = await confirmLanWarning();
       if (!accepted) return;
@@ -77,7 +78,7 @@ export default function NewProviderScreen() {
           placeholder={kind.includes('ollama') || kind === 'llama_cpp' || kind === 'litellm' ? 'Optional for local providers' : 'sk-…'}
           hint={
             Platform.OS === 'web'
-              ? 'Kept only for this browser tab session and never included in backups. Browser apps do not have a device keychain.'
+              ? 'Kept in this browser and never included in backups. A browser is not a device keychain.'
               : 'Paste from your provider dashboard. Stored in the device keychain and never included in backups.'
           }
         />
@@ -88,7 +89,7 @@ export default function NewProviderScreen() {
 }
 
 function confirmLanWarning(): Promise<boolean> {
-  return new Promise((resolve) => Alert.alert('Local HTTP connection', 'Prompts sent over HTTP are not encrypted. Only continue for a private network you trust.', [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) }, { text: 'Continue', onPress: () => resolve(true) }]));
+  return confirmDialog('Local HTTP connection', 'Prompts sent over HTTP are not encrypted. Only continue for a private network you trust.');
 }
 
 const styles = StyleSheet.create({

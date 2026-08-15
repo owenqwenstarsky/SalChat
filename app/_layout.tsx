@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, SourceSans3_400Regular, SourceSans3_600SemiBold, SourceSans3_700Bold } from '@expo-google-fonts/source-sans-3';
+import { DialogHost } from '@/components/Dialogs';
 import { migrateDatabase } from '@/storage/database';
 import { useSalStore } from '@/state/store';
 import { useTheme } from '@/theme';
@@ -43,6 +44,7 @@ function Bootstrap() {
         <Stack.Screen name="provider/[id]" />
         <Stack.Screen name="model/[id]" />
       </Stack>
+      <DialogHost />
     </View>
   );
 }

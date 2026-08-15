@@ -1,6 +1,6 @@
 import { secretStorage } from '../secretStorage.web';
 
-describe('browser credential session storage', () => {
+describe('browser credential storage', () => {
   const values = new Map<string, string>();
   const browserStorage = {
     getItem: jest.fn((key: string) => values.get(key) ?? null),
@@ -11,10 +11,10 @@ describe('browser credential session storage', () => {
   beforeEach(() => {
     values.clear();
     jest.clearAllMocks();
-    Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: browserStorage });
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: browserStorage });
   });
 
-  it('prefixes, resolves, and deletes tab-scoped secrets', async () => {
+  it('prefixes, resolves, and deletes origin-local secrets', async () => {
     await secretStorage.setItemAsync('api-key', 'secret');
     await expect(secretStorage.getItemAsync('api-key')).resolves.toBe('secret');
     expect(browserStorage.setItem).toHaveBeenCalledWith('sal-chat.secret.api-key', 'secret');
@@ -22,8 +22,8 @@ describe('browser credential session storage', () => {
     await expect(secretStorage.getItemAsync('api-key')).resolves.toBeNull();
   });
 
-  it('fails clearly outside a browser session', async () => {
-    Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: undefined });
-    await expect(secretStorage.getItemAsync('api-key')).rejects.toThrow('browser session');
+  it('fails clearly outside a browser', async () => {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: undefined });
+    await expect(secretStorage.getItemAsync('api-key')).rejects.toThrow('browser');
   });
 });

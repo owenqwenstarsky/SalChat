@@ -27,7 +27,7 @@ function dbWith(payloads: AttachmentBlob[] = []): SQLiteDatabase {
 describe('browser attachment storage', () => {
   beforeEach(() => {
     jest.spyOn(globalThis, 'fetch').mockResolvedValue(response());
-    jest.spyOn(globalThis, 'btoa').mockImplementation((value) => value === '\u0001\u0002\u0003' ? 'AQID' : '');
+    jest.spyOn(globalThis, 'btoa').mockImplementation((value) => (value === '\u0001\u0002\u0003' ? 'AQID' : ''));
   });
 
   afterEach(() => jest.restoreAllMocks());

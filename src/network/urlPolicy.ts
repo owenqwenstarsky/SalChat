@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export interface UrlPolicyResult {
   valid: boolean;
   normalizedUrl?: string;
@@ -27,7 +29,7 @@ export function isPrivateHost(hostname: string): boolean {
   );
 }
 
-export function validateProviderUrl(input: string): UrlPolicyResult {
+export function validateProviderUrl(input: string, platform = Platform.OS): UrlPolicyResult {
   const trimmed = input.trim().replace(/\/+$/, '');
   let url: URL;
   try {
@@ -51,7 +53,7 @@ export function validateProviderUrl(input: string): UrlPolicyResult {
     valid: true,
     normalizedUrl: trimmed,
     requiresLanWarning: url.protocol === 'http:',
-    ...(url.hostname === 'localhost'
+    ...(url.hostname === 'localhost' && platform !== 'web'
       ? { message: 'On a physical phone, localhost points to the phone. Use the provider computer’s LAN address.' }
       : {}),
   };

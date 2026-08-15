@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Keyboard,
   LayoutAnimation,
@@ -9,10 +8,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { alertDialog } from '@/components/Dialogs';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,7 +23,8 @@ import * as ImagePicker from 'expo-image-picker';
 import type { AttachSource } from '@/components/chat/AttachSourceMenu';
 import { Composer } from '@/components/chat/Composer';
 import { ContextSheet } from '@/components/chat/ContextSheet';
-import { HistoryDrawer } from '@/components/chat/HistoryDrawer';
+import { HistoryDrawer, HistoryPanel } from '@/components/chat/HistoryDrawer';
+import { HISTORY_SIDEBAR_WIDTH, TRANSCRIPT_MAX_WIDTH, useShellLayout } from '@/components/chat/useShellLayout';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ModelPicker } from '@/components/chat/ModelPicker';
 import { buildEffectiveContext, type ContextBudget } from '@/chat/context';
@@ -86,8 +88,10 @@ function useComposerBottomInset(restingInset: number) {
 export function ChatScreen({ conversationId }: { conversationId: string | null }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { wide } = useShellLayout();
   const composerBottom = useComposerBottomInset(insets.bottom);
   const listRef = useRef<FlatList<TimelineItem>>(null);
+  const searchRef = useRef<TextInput>(null);
   const pinnedToBottomRef = useRef(true);
   const lastOffsetRef = useRef(0);
   const ignoreScrollRef = useRef(false);
@@ -224,7 +228,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       : messages;
     const incompatible = incompatibleAttachments(next, effectiveMessages, attachments);
     if (incompatible.length) {
-      Alert.alert('This history contains unsupported media', `${modelLabel(next)} is not configured for ${incompatible.join(', ')} input.`, [
+      alertDialog('This history contains unsupported media', `${modelLabel(next)} is not configured for ${incompatible.join(', ')} input.`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Configure model', onPress: () => openSettings({ kind: 'model', modelId: next.id, focus: 'capabilities' }) },
         { text: 'Fork text-only', onPress: () => void forkTextOnly(next) },
@@ -308,7 +312,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       accepted.push(asset);
     }
     if (skipped.length) {
-      Alert.alert(
+      alertDialog(
         skipped.length === 1 ? 'This file type is not enabled' : 'Some files were skipped',
         `${skipped.join(', ')} can’t be attached to ${model ? modelLabel(model) : 'this model'}.`,
       );
@@ -325,7 +329,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
         await saveAttachment(blob);
         imported.push(blob.id);
       } catch (error) {
-        Alert.alert('Could not attach file', error instanceof Error ? error.message : String(error));
+        alertDialog('Could not attach file', error instanceof Error ? error.message : String(error));
       }
     }
     if (imported.length) setPending((current) => [...new Set([...current, ...imported])]);
@@ -356,7 +360,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
         })),
       );
     } catch (error) {
-      Alert.alert('Could not open photo library', error instanceof Error ? error.message : String(error));
+      alertDialog('Could not open photo library', error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -372,7 +376,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
                 { text: 'Cancel', style: 'cancel' as const },
                 { text: 'Open Settings', onPress: () => void Linking.openSettings() },
               ];
-          Alert.alert(
+          alertDialog(
             'Camera access required',
             permission.canAskAgain
               ? 'Allow camera access to take a photo and attach it.'
@@ -397,7 +401,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
         })),
       );
     } catch (error) {
-      Alert.alert('Could not take photo', error instanceof Error ? error.message : String(error));
+      alertDialog('Could not take photo', error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -465,6 +469,30 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     router.replace({ pathname: '/chat/[id]', params: { id: next.id } });
   };
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      const meta = event.metaKey || event.ctrlKey;
+      if (meta && event.key.toLowerCase() === 'n') {
+        event.preventDefault();
+        void startNewChat();
+      }
+      if (meta && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (!wide) setShowHistory(true);
+        requestAnimationFrame(() => searchRef.current?.focus());
+      }
+      if (event.key === 'Escape') {
+        setShowHistory(false);
+        setShowModels(false);
+        setShowContext(false);
+        setShowAttachMenu(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const submit = async () => {
     if ((!text.trim() && !pending.length) || !model || sending) return;
     const outgoing = text;
@@ -486,7 +514,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
       if (error instanceof ConfigurationError) {
         alertWithSettings('Cannot send', error.message, error.destination);
       } else {
-        Alert.alert('Cannot send', error instanceof Error ? error.message : String(error));
+        alertDialog('Cannot send', error instanceof Error ? error.message : String(error));
       }
     } finally {
       setSending(false);
@@ -510,10 +538,10 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     try {
       await saveContext(mode, note);
       const passes = await compactConversation(conversation.id, rebuild);
-      Alert.alert(rebuild ? 'Checkpoint rebuilt' : 'Context compacted', `${passes} summary ${passes === 1 ? 'pass' : 'passes'} completed.`);
+      alertDialog(rebuild ? 'Checkpoint rebuilt' : 'Context compacted', `${passes} summary ${passes === 1 ? 'pass' : 'passes'} completed.`);
     } catch (error) {
       if (!contextStopRequestedRef.current) {
-        Alert.alert(rebuild ? 'Could not rebuild checkpoint' : 'Could not compact context', error instanceof Error ? error.message : String(error));
+        alertDialog(rebuild ? 'Could not rebuild checkpoint' : 'Could not compact context', error instanceof Error ? error.message : String(error));
       }
     } finally {
       setContextBusy(false);
@@ -539,19 +567,56 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
     router.push(href);
   };
 
+  const historyProps = {
+    conversations,
+    messages: allMessages,
+    currentId: conversationId,
+    onSelect: (id: string) => {
+      setShowHistory(false);
+      if (id !== conversationId) router.replace({ pathname: '/chat/[id]', params: { id } });
+    },
+    onNewChat: () => void startNewChat(),
+    onRename: (id: string, title: string) => {
+      const target = conversations.find((item) => item.id === id);
+      if (target) void saveConversation({ ...target, title, updatedAt: new Date().toISOString() });
+    },
+    onDelete: (id: string) => {
+      void deleteConversation(id).then(() => {
+        if (id === conversationId) {
+          const next = latestConversationWithMessages(
+            conversations.filter((item) => item.id !== id),
+            allMessages.filter((item) => item.conversationId !== id),
+          );
+          router.replace(next ? { pathname: '/chat/[id]', params: { id: next.id } } : '/');
+        }
+      });
+    },
+    onOpenModels: () => openRoute('/models'),
+    onOpenAttachments: () => openRoute('/attachments'),
+    onOpenSettings: () => openRoute('/settings'),
+  };
+
   return (
-    <SafeAreaView edges={['top']} style={[styles.safe, { backgroundColor: theme.background }]}>
+    <SafeAreaView edges={['top']} style={[styles.safe, wide && styles.wideSafe, { backgroundColor: theme.background }]}>
+      {wide ? (
+        <View style={[styles.sidebar, { borderRightColor: theme.line, paddingTop: 8, paddingBottom: Math.max(insets.bottom, 8) }]}>
+          <HistoryPanel ref={searchRef} {...historyProps} />
+        </View>
+      ) : null}
+      <View style={styles.chatColumn}>
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Open chat history"
-          onPress={() => {
-            setShowAttachMenu(false);
-            setShowHistory(true);
-          }}
-          style={styles.headerButton}
-        >
-          <Ionicons name="menu-outline" size={24} color={theme.text} />
-        </Pressable>
+        {wide ? <View style={styles.headerButton} /> : (
+          <Pressable
+            accessibilityLabel="Open chat history"
+            onPress={() => {
+              setShowAttachMenu(false);
+              setShowHistory(true);
+            }}
+            style={styles.headerButton}
+          >
+            <Ionicons name="menu-outline" size={24} color={theme.text} />
+          </Pressable>
+        )}
         <Pressable
           style={styles.titleWrap}
           onPress={() => {
@@ -579,7 +644,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
             data={timeline}
             key={conversationId ?? 'new'}
             keyExtractor={(item) => item.kind === 'message' ? item.message.id : item.id}
-            contentContainerStyle={[styles.messages, !messages.length && styles.center]}
+            contentContainerStyle={[styles.messages, wide && styles.messagesWide, !messages.length && styles.center]}
             ItemSeparatorComponent={MessageSeparator}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
@@ -637,7 +702,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
             />
           ) : null}
         </View>
-        <View style={{ paddingBottom: composerBottom }}>
+        <View style={[styles.composerWrap, wide && styles.composerWide, { paddingBottom: composerBottom }]}>
           <Composer
             text={text}
             onChangeText={setText}
@@ -658,6 +723,7 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
             onRemoveAttachment={(id) => setPending((current) => current.filter((item) => item !== id))}
             onSend={() => void submit()}
             onStop={() => conversation && stopGeneration(conversation.id)}
+            onDropFiles={(files) => void ingestPickedAssets(files)}
           />
         </View>
       </View>
@@ -690,36 +756,15 @@ export function ChatScreen({ conversationId }: { conversationId: string | null }
           }}
         />
       ) : null}
-      <HistoryDrawer
-        visible={showHistory}
-        conversations={conversations}
-        messages={allMessages}
-        currentId={conversationId}
-        onClose={() => setShowHistory(false)}
-        onSelect={(id) => {
-          setShowHistory(false);
-          if (id !== conversationId) router.replace({ pathname: '/chat/[id]', params: { id } });
-        }}
-        onNewChat={() => void startNewChat()}
-        onRename={(id, title) => {
-          const target = conversations.find((item) => item.id === id);
-          if (target) void saveConversation({ ...target, title, updatedAt: new Date().toISOString() });
-        }}
-        onDelete={(id) => {
-          void deleteConversation(id).then(() => {
-            if (id === conversationId) {
-              const next = latestConversationWithMessages(
-                conversations.filter((item) => item.id !== id),
-                allMessages.filter((item) => item.conversationId !== id),
-              );
-              router.replace(next ? { pathname: '/chat/[id]', params: { id: next.id } } : '/');
-            }
-          });
-        }}
-        onOpenModels={() => openRoute('/models')}
-        onOpenAttachments={() => openRoute('/attachments')}
-        onOpenSettings={() => openRoute('/settings')}
-      />
+      {wide ? null : (
+        <HistoryDrawer
+          visible={showHistory}
+          onClose={() => setShowHistory(false)}
+          searchRef={searchRef}
+          {...historyProps}
+        />
+      )}
+      </View>
     </SafeAreaView>
   );
 }
@@ -729,7 +774,7 @@ function openSettings(destination: SettingsDestination): void {
 }
 
 function alertWithSettings(title: string, message: string, destination: SettingsDestination): void {
-  Alert.alert(title, message, [
+  alertDialog(title, message, [
     { text: 'Cancel', style: 'cancel' },
     { text: settingsActionLabel(destination), onPress: () => openSettings(destination) },
   ]);
@@ -782,6 +827,9 @@ function incompatibleAttachments(
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  wideSafe: { flexDirection: 'row' },
+  sidebar: { width: HISTORY_SIDEBAR_WIDTH, borderRightWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14 },
+  chatColumn: { flex: 1 },
   header: { minHeight: HEADER_HEIGHT, paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center' },
   headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   titleWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
@@ -790,6 +838,9 @@ const styles = StyleSheet.create({
   listWrap: { flex: 1 },
   list: { flex: 1 },
   messages: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 28 },
+  messagesWide: { width: '100%', maxWidth: TRANSCRIPT_MAX_WIDTH, alignSelf: 'center' },
+  composerWrap: {},
+  composerWide: { width: '100%', maxWidth: TRANSCRIPT_MAX_WIDTH, alignSelf: 'center' },
   separator: { height: 22 },
   checkpointRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 8 },
   checkpointLine: { flex: 1, height: StyleSheet.hairlineWidth },

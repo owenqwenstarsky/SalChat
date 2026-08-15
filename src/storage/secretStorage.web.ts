@@ -1,10 +1,10 @@
 const PREFIX = 'sal-chat.secret.';
 
 function storage(): Storage {
-  if (typeof sessionStorage === 'undefined') {
-    throw new Error('Credential storage is only available in a browser session.');
+  if (typeof localStorage === 'undefined') {
+    throw new Error('Credential storage is only available in a browser.');
   }
-  return sessionStorage;
+  return localStorage;
 }
 
 export const secretStorage = {

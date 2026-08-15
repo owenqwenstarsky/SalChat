@@ -20,7 +20,7 @@ const mimeTypes = {
 function headers(contentType) {
   return {
     'Content-Type': contentType,
-    'Cross-Origin-Embedder-Policy': 'require-corp',
+    'Cross-Origin-Embedder-Policy': 'credentialless',
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Content-Type-Options': 'nosniff',
@@ -37,6 +37,11 @@ async function existingFile(path) {
 
 const server = createServer(async (request, response) => {
   const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname);
+  if (pathname === '/health') {
+    response.writeHead(200, headers('text/plain; charset=utf-8'));
+    response.end('ok');
+    return;
+  }
   const candidate = normalize(join(root, pathname));
   const requestedFile = candidate.startsWith(root) ? await existingFile(candidate) : null;
   const file = requestedFile ?? join(root, 'index.html');

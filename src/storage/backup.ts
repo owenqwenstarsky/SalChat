@@ -47,7 +47,7 @@ export function buildBackupArchive(data: BackupData): Uint8Array {
 }
 
 export function writeBackupArchive(bytes: Uint8Array): string {
-  const file = new File(Paths.cache, `sal-chat-${new Date().toISOString().replace(/[:.]/g, '-')}.salchat`);
+  const file = new File(Paths.cache, backupFilename());
   file.create({ overwrite: true });
   file.write(bytes);
   return file.uri;
