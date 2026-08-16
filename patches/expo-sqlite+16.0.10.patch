@@ -1,0 +1,206 @@
+diff --git a/node_modules/expo-sqlite/web/SQLiteModule.ts b/node_modules/expo-sqlite/web/SQLiteModule.ts
+index 717c987..55aec8e 100644
+--- a/node_modules/expo-sqlite/web/SQLiteModule.ts
++++ b/node_modules/expo-sqlite/web/SQLiteModule.ts
+@@ -18,9 +18,56 @@ let nextNativeDatabaseId = 0;
+ let nextNativeStatementId = 0;
+ let nextNativeSessionId = 0;
+ 
++const WORKER_KEY = '__expoSqliteWorker';
++const WORKER_WIRED_KEY = '__expoSqliteWorkerWired';
++
++function sharedWorkerSlot(): {
++  worker: Worker | null;
++  wired: boolean;
++} {
++  const slot = globalThis as typeof globalThis & {
++    [WORKER_KEY]?: Worker | null;
++    [WORKER_WIRED_KEY]?: boolean;
++  };
++  return {
++    get worker() {
++      return slot[WORKER_KEY] ?? null;
++    },
++    set worker(value) {
++      slot[WORKER_KEY] = value;
++    },
++    get wired() {
++      return slot[WORKER_WIRED_KEY] === true;
++    },
++    set wired(value) {
++      slot[WORKER_WIRED_KEY] = value;
++    },
++  };
++}
++
++function resetWebSqliteWorker(): void {
++  const slot = sharedWorkerSlot();
++  const existing = worker ?? slot.worker;
++  if (existing) {
++    try {
++      existing.terminate();
++    } catch {}
++  }
++  worker = null;
++  slot.worker = null;
++  slot.wired = false;
++}
++
+ function getWorker(): Worker {
++  const slot = sharedWorkerSlot();
++  if (!worker) {
++    worker = slot.worker;
++  }
+   if (!worker) {
+     worker = new Worker(new URL('./worker', window.location.href));
++    slot.worker = worker;
++  }
++  if (!slot.wired) {
+     worker.addEventListener('message', (event) => {
+       if (event.data.type === 'onDatabaseChange') {
+         // @ts-expect-error EventEmitter type for NativeModule is not inferred correctly on web.
+@@ -29,10 +76,16 @@ function getWorker(): Worker {
+       }
+       workerMessageHandler(event);
+     });
++    slot.wired = true;
+   }
+   return worker;
+ }
+ 
++if (typeof globalThis !== 'undefined') {
++  (globalThis as typeof globalThis & { __EXPO_SQLITE_RESET_WORKER?: () => void }).__EXPO_SQLITE_RESET_WORKER =
++    resetWebSqliteWorker;
++}
++
+ class NativeDatabase {
+   public readonly id: number;
+ 
+diff --git a/node_modules/expo-sqlite/web/wa-sqlite/AccessHandlePoolVFS.js b/node_modules/expo-sqlite/web/wa-sqlite/AccessHandlePoolVFS.js
+index cbb68f3..3510f28 100644
+--- a/node_modules/expo-sqlite/web/wa-sqlite/AccessHandlePoolVFS.js
++++ b/node_modules/expo-sqlite/web/wa-sqlite/AccessHandlePoolVFS.js
+@@ -23,6 +23,35 @@ const PERSISTENT_FILE_TYPES =
+   VFS.SQLITE_OPEN_WAL;
+ 
+ const DEFAULT_CAPACITY = 6;
++const ACCESS_HANDLE_RETRY_ATTEMPTS = 10;
++const ACCESS_HANDLE_RETRY_BASE_MS = 40;
++
++function isAccessHandleBusyError(error) {
++  const name = error?.name ?? '';
++  const message = String(error?.message ?? error ?? '');
++  return (
++    name === 'NoModificationAllowedError' ||
++    message.includes('createSyncAccessHandle') ||
++    message.includes('Access Handles cannot be created')
++  );
++}
++
++async function createSyncAccessHandleWithRetry(handle) {
++  let lastError;
++  for (let attempt = 0; attempt < ACCESS_HANDLE_RETRY_ATTEMPTS; attempt += 1) {
++    try {
++      return await handle.createSyncAccessHandle();
++    } catch (error) {
++      lastError = error;
++      if (!isAccessHandleBusyError(error) || attempt === ACCESS_HANDLE_RETRY_ATTEMPTS - 1) {
++        throw error;
++      }
++      const delay = ACCESS_HANDLE_RETRY_BASE_MS * 2 ** attempt;
++      await new Promise((resolve) => setTimeout(resolve, delay));
++    }
++  }
++  throw lastError;
++}
+ 
+ /**
+  * This VFS uses the updated Access Handle API with all synchronous methods
+@@ -259,7 +288,7 @@ export class AccessHandlePoolVFS extends FacadeVFS {
+     for (let i = 0; i < n; ++i) {
+       const name = Math.random().toString(36).replace('0.', '');
+       const handle = await this.#directoryHandle.getFileHandle(name, { create: true });
+-      const accessHandle = await handle.createSyncAccessHandle();
++      const accessHandle = await createSyncAccessHandleWithRetry(handle);
+       this.#mapAccessHandleToName.set(accessHandle, name);
+ 
+       this.#setAssociatedPath(accessHandle, '', 0);
+@@ -301,7 +330,7 @@ export class AccessHandlePoolVFS extends FacadeVFS {
+     // Open access handles in parallel, separating associated and unassociated.
+     await Promise.all(
+       files.map(async ([name, handle]) => {
+-        const accessHandle = await handle.createSyncAccessHandle();
++        const accessHandle = await createSyncAccessHandleWithRetry(handle);
+         this.#mapAccessHandleToName.set(accessHandle, name);
+         const path = this.#getAssociatedPath(accessHandle);
+         if (path) {
+diff --git a/node_modules/expo-sqlite/web/worker.ts b/node_modules/expo-sqlite/web/worker.ts
+index deaf721..8b1110c 100644
+--- a/node_modules/expo-sqlite/web/worker.ts
++++ b/node_modules/expo-sqlite/web/worker.ts
+@@ -260,6 +260,12 @@ async function closeDatabase(nativeDatabaseId: number) {
+     databaseIdMap.delete(nativeDatabaseId);
+     await sqlite3.close(dbEntity.pointer);
+   }
++  if (databaseIdMap.size === 0 && _vfs) {
++    await _vfs.close();
++    _vfs = null;
++    _vfsMemory = null;
++    _sqlite3 = null;
++  }
+ }
+ 
+ async function deleteDatabase(databasePath: string): Promise<void> {
+@@ -778,29 +784,36 @@ async function maybeInitAsync(): Promise<{
+   vfsMemory: MemoryVFS;
+ }> {
+   if (!_sqlite3) {
+-    const module = await WaSQLiteFactory({
+-      locateFile: () => wasmModule,
+-    });
+-    _sqlite3 = SQLite.Factory(module) as SQLiteAPI;
+-    if (!_sqlite3) {
+-      throw new Error('Failed to initialize wa-sqlite');
+-    }
++    try {
++      const module = await WaSQLiteFactory({
++        locateFile: () => wasmModule,
++      });
++      _sqlite3 = SQLite.Factory(module) as SQLiteAPI;
++      if (!_sqlite3) {
++        throw new Error('Failed to initialize wa-sqlite');
++      }
+ 
+-    if (_vfs == null) {
+-      _vfs = await AccessHandlePoolVFS.create(VFS_NAME_PERSISTENT, module);
+       if (_vfs == null) {
+-        throw new Error('Failed to initialize AccessHandlePoolVFS');
++        _vfs = await AccessHandlePoolVFS.create(VFS_NAME_PERSISTENT, module);
++        if (_vfs == null) {
++          throw new Error('Failed to initialize AccessHandlePoolVFS');
++        }
+       }
+-    }
+-    _sqlite3.vfs_register(_vfs, true);
++      _sqlite3.vfs_register(_vfs, true);
+ 
+-    if (_vfsMemory == null) {
+-      _vfsMemory = await MemoryVFS.create(VFS_NAME_MEMORY, module);
+       if (_vfsMemory == null) {
+-        throw new Error('Failed to initialize MemoryVFS');
++        _vfsMemory = await MemoryVFS.create(VFS_NAME_MEMORY, module);
++        if (_vfsMemory == null) {
++          throw new Error('Failed to initialize MemoryVFS');
++        }
+       }
++      _sqlite3.vfs_register(_vfsMemory, false);
++    } catch (error) {
++      _sqlite3 = null;
++      _vfs = null;
++      _vfsMemory = null;
++      throw error;
+     }
+-    _sqlite3.vfs_register(_vfsMemory, false);
+   }
+   if (_vfs == null || _vfsMemory == null) {
+     throw new Error('Invalid VFS state');
