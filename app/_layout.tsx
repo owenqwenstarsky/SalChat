@@ -5,17 +5,20 @@ import { SQLiteProvider, useSQLiteContext } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, SourceSans3_400Regular, SourceSans3_600SemiBold, SourceSans3_700Bold } from '@expo-google-fonts/source-sans-3';
 import { DialogHost } from '@/components/Dialogs';
+import { WebSqliteGate } from '@/components/WebSqliteGate';
 import { migrateDatabase } from '@/storage/database';
 import { useSalStore } from '@/state/store';
 import { useTheme } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <Suspense fallback={<Loading />}>
-      <SQLiteProvider databaseName="sal-chat.db" onInit={migrateDatabase} useSuspense>
-        <Bootstrap />
-      </SQLiteProvider>
-    </Suspense>
+    <WebSqliteGate>
+      <Suspense fallback={<Loading />}>
+        <SQLiteProvider databaseName="sal-chat.db" onInit={migrateDatabase} useSuspense>
+          <Bootstrap />
+        </SQLiteProvider>
+      </Suspense>
+    </WebSqliteGate>
   );
 }
 
